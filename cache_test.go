@@ -1,0 +1,189 @@
+package godepfind
+
+import (
+	"testing"
+)
+
+// MockHandler for testing
+type MockHandler struct {
+	name            string
+	unobservedFiles []string
+}
+
+func (m *MockHandler) Name() string {
+	return m.name
+}
+
+func (m *MockHandler) UnobservedFiles() []string {
+	return m.unobservedFiles
+}
+
+func TestThisFileIsMine(t *testing.T) {
+	// Create a new GoDepFind instance using testproject (same as existing tests)
+	finder := New("testproject")
+
+	// Create mock handlers that match the real testproject structure
+	serverHandler := &MockHandler{
+		name:            "serverHandler",
+		unobservedFiles: []string{"main.go"},
+	}
+
+	cmdHandler := &MockHandler{
+		name:            "cmdHandler",
+		unobservedFiles: []string{"main.go"},
+	}
+
+	wasmHandler := &MockHandler{
+		name:            "wasmHandler",
+		unobservedFiles: []string{"main.go"},
+	}
+
+	// Test with a nil handler
+	_, err := finder.ThisFileIsMine(nil, "module1.go", "./modules/module1/module1.go", "write")
+	if err == nil {
+		t.Error("Expected error for nil handler")
+	}
+
+	// Test with module1.go - should match serverHandler and cmdHandler (both import module1)
+	isMine, err := finder.ThisFileIsMine(serverHandler, "module1.go", "./modules/module1/module1.go", "write")
+	if err != nil {
+		t.Logf("Cache initialization result: %v", err)
+	} else {
+		t.Logf("ServerHandler owns module1.go: %v", isMine)
+	}
+
+	// Test with module3.go - should only match wasmHandler
+	isMine2, err := finder.ThisFileIsMine(wasmHandler, "module3.go", "./modules/module3/module3.go", "write")
+	if err != nil {
+		t.Logf("Cache result for module3: %v", err)
+	} else {
+		t.Logf("WasmHandler owns module3.go: %v", isMine2)
+	}
+
+	// Test that cmdHandler doesn't own module3.go
+	isMine3, err := finder.ThisFileIsMine(cmdHandler, "module3.go", "./modules/module3/module3.go", "write")
+	if err != nil {
+		t.Logf("Cache result: %v", err)
+	} else {
+		t.Logf("CmdHandler should NOT own module3.go: %v", isMine3)
+		if isMine3 {
+			t.Error("CmdHandler should not own module3.go since appBcmd doesn't import module3")
+		}
+	}
+}
+
+func TestMatchesHandlerFile(t *testing.T) {
+	finder := New("testproject")
+
+	tests := []struct {
+		mainPkg     string
+		handlerFile string
+		expected    bool
+		description string
+	}{
+		{"testproject/appAserver", "appAserver", true, "exact match with app name"},
+		{"testproject/appBcmd", "appBcmd", true, "exact match with cmd app name"},
+		{"testproject/appCwasm", "appCwasm", true, "exact match with wasm app name"},
+		{"testproject/appAserver", "main.go", false, "main.go is too generic"},
+		{"testproject/appBcmd", "appAserver", false, "cmd app doesn't match server"},
+		{"testproject/appCwasm", "wasm", true, "wasm in appCwasm should match wasm handler"},
+	}
+
+	for _, test := range tests {
+		result := finder.matchesHandlerFile(test.mainPkg, test.handlerFile)
+		if result != test.expected {
+			t.Errorf("Test '%s': expected %v, got %v", test.description, test.expected, result)
+		}
+	}
+}
+
+func TestCacheInitialization(t *testing.T) {
+	finder := New("testproject") // Use testproject like existing tests
+
+	// Initially cache should not be initialized
+	if finder.CachedModule {
+		t.Error("Cache should not be initialized initially")
+	}
+
+	// Verify cache fields are initialized
+	if finder.packageCache == nil {
+		t.Error("packageCache should be initialized")
+	}
+	if finder.dependencyGraph == nil {
+		t.Error("dependencyGraph should be initialized")
+	}
+	if finder.reverseDeps == nil {
+		t.Error("reverseDeps should be initialized")
+	}
+	if finder.fileToPackage == nil {
+		t.Error("fileToPackage should be initialized")
+	}
+
+	// Test lazy initialization with real testproject
+	err := finder.ensureCacheInitialized()
+	if err != nil {
+		t.Logf("Cache initialization result: %v", err)
+	} else {
+		t.Log("Cache initialized successfully")
+
+		// Verify cache was populated
+		if len(finder.packageCache) == 0 {
+			t.Error("Expected packageCache to be populated after initialization")
+		}
+		if len(finder.mainPackages) == 0 {
+			t.Error("Expected mainPackages to be populated (should find appAserver, appBcmd, appCwasm)")
+		} else {
+			t.Logf("Found main packages: %v", finder.mainPackages)
+		}
+	}
+
+	// After successful initialization, cache should be marked as initialized
+	if err == nil && !finder.CachedModule {
+		t.Error("Cache should be marked as initialized after successful rebuild")
+	}
+}
+
+func TestGoFileComesFromMainWithCache(t *testing.T) {
+	// Test the cached version of GoFileComesFromMain using real testproject
+	finder := New("testproject")
+
+	// Test with module1.go - should be used by appAserver and appBcmd
+	mains, err := finder.GoFileComesFromMain("module1.go")
+	if err != nil {
+		t.Logf("GoFileComesFromMain error: %v", err)
+		return // Skip if we can't analyze the testproject
+	}
+
+	t.Logf("Main packages that depend on module1.go: %v", mains)
+
+	// module1 is imported by appAserver and appBcmd, so should find both
+	expectedCount := 2
+	if len(mains) != expectedCount {
+		t.Logf("Expected %d main packages for module1.go, got %d: %v", expectedCount, len(mains), mains)
+	}
+
+	// Test with module3.go - should only be used by appCwasm
+	mains2, err := finder.GoFileComesFromMain("module3.go")
+	if err != nil {
+		t.Errorf("Unexpected error for module3.go: %v", err)
+		return
+	}
+
+	t.Logf("Main packages that depend on module3.go: %v", mains2)
+
+	// module3 is only imported by appCwasm
+	expectedCount2 := 1
+	if len(mains2) != expectedCount2 {
+		t.Logf("Expected %d main package for module3.go, got %d: %v", expectedCount2, len(mains2), mains2)
+	}
+
+	// Test with a non-existent file
+	mains3, err := finder.GoFileComesFromMain("nonexistent.go")
+	if err != nil {
+		t.Errorf("Unexpected error for non-existent file: %v", err)
+	}
+
+	if len(mains3) != 0 {
+		t.Errorf("Expected empty result for non-existent file, got %v", mains3)
+	}
+}

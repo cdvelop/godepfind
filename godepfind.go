@@ -11,6 +11,14 @@ import (
 type GoDepFind struct {
 	rootDir     string
 	testImports bool
+
+	// Cache fields
+	CachedModule    bool
+	packageCache    map[string]*build.Package
+	dependencyGraph map[string][]string // pkg -> dependencies
+	reverseDeps     map[string][]string // pkg -> reverse dependencies
+	fileToPackage   map[string]string   // filename -> package path
+	mainPackages    []string
 }
 
 // New creates a new GoDepFind instance with the specified root directory
@@ -19,8 +27,14 @@ func New(rootDir string) *GoDepFind {
 		rootDir = "."
 	}
 	return &GoDepFind{
-		rootDir:     rootDir,
-		testImports: false,
+		rootDir:         rootDir,
+		testImports:     false,
+		CachedModule:    false,
+		packageCache:    make(map[string]*build.Package),
+		dependencyGraph: make(map[string][]string),
+		reverseDeps:     make(map[string][]string),
+		fileToPackage:   make(map[string]string),
+		mainPackages:    []string{},
 	}
 }
 
@@ -160,49 +174,30 @@ func (g *GoDepFind) FindReverseDeps(sourcePath string, targetPaths []string) ([]
 	return result, nil
 }
 
-// GoFileComesFromMain finds which main packages depend on the given file
+// GoFileComesFromMain finds which main packages depend on the given file (cached version)
 // fileName: the name of the file to check (e.g., "module3.go")
 // Returns: slice of main package paths that depend on this file
 func (g *GoDepFind) GoFileComesFromMain(fileName string) ([]string, error) {
-	// Find the package containing the file
-	filePkg, err := g.findPackageContainingFile(fileName)
-	if err != nil || filePkg == "" {
-		return []string{}, nil // File not found or not in any package
-	}
-
-	// Find all main packages
-	mainPaths, err := g.findMainPackages()
-	if err != nil {
+	// Ensure cache is initialized
+	if err := g.ensureCacheInitialized(); err != nil {
 		return nil, err
 	}
 
-	// Check which main packages import the file's package (directly or transitively)
+	// Find the package containing the file using cache
+	filePkg, exists := g.fileToPackage[fileName]
+	if !exists || filePkg == "" {
+		return []string{}, nil // File not found or not in any package
+	}
+
+	// Check which main packages import the file's package using cached data
 	var result []string
-	for _, mainPath := range mainPaths {
-		if g.mainImportsPackage(mainPath, filePkg) {
+	for _, mainPath := range g.mainPackages {
+		if g.cachedMainImportsPackage(mainPath, filePkg) {
 			result = append(result, mainPath)
 		}
 	}
 
 	return result, nil
-}
-
-// mainImportsPackage checks if a main package imports a target package (directly or transitively)
-func (g *GoDepFind) mainImportsPackage(mainPath, targetPkg string) bool {
-	// Get all packages to build the dependency graph
-	allPaths, err := g.listPackages("./...")
-	if err != nil {
-		return false
-	}
-
-	allPackages, err := g.getPackages(allPaths)
-	if err != nil {
-		return false
-	}
-
-	// Check if main imports target package
-	targets := map[string]bool{targetPkg: true}
-	return g.imports(mainPath, allPackages, targets)
 }
 
 // findMainPackages finds all packages with main function
