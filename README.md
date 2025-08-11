@@ -68,21 +68,22 @@ fmt.Printf("Main packages affected by database.go changes: %v\n", mains)
 **For development tools**: Determine which handler should process a file change.
 
 ```go
-// Define a handler that manages specific main files
+// Define a handler that manages a specific main file
 type MyHandler struct {
-    name string
+    name         string
+    mainFilePath string
 }
 
 func (h *MyHandler) Name() string {
     return "serverHandler"
 }
 
-func (h *MyHandler) UnobservedFiles() []string {
-    return []string{"main.server.go", "server"}
+func (h *MyHandler) MainFilePath() string {
+    return h.mainFilePath // e.g. "main.server.go" or "server"
 }
 
 // Check if a file change belongs to this handler
-handler := &MyHandler{}
+handler := &MyHandler{name: "serverHandler", mainFilePath: "main.server.go"}
 isMine, err := finder.ThisFileIsMine(handler, "database.go", "./internal/db/database.go", "write")
 if err != nil {
     log.Fatal(err)
@@ -139,18 +140,21 @@ fmt.Printf("Need to rebuild: %v\n", affected)
 // Note: cmd/cli is NOT affected because it doesn't import the database package
 
 // NEW: Handler-based approach for development tools
-type ServerHandler struct{}
+type ServerHandler struct {
+    name         string
+    mainFilePath string
+}
 
 func (h *ServerHandler) Name() string {
     return "serverH"
 }
 
-func (h *ServerHandler) UnobservedFiles() []string {
-    return []string{"main.server.go", "server"}
+func (h *ServerHandler) MainFilePath() string {
+    return h.mainFilePath // e.g. "main.server.go" or "web/server.go"
 }
 
 // Check if server handler should process this change
-serverHandler := &ServerHandler{}
+serverHandler := &ServerHandler{name: "serverH", mainFilePath: "main.server.go"}
 shouldProcess, err := finder.ThisFileIsMine(serverHandler, "db.go", "./internal/database/db.go", "write")
 if err != nil {
     log.Fatal(err)
@@ -201,10 +205,10 @@ Find packages in sourcePath that import any of the targetPaths.
 ```go
 type DepHandler interface {
     Name() string              // Unique handler name
-    UnobservedFiles() []string // Main files this handler manages
+    MainFilePath() string      // Main file this handler manages (e.g. "main.server.go")
 }
-```
 
+Implement this interface in your handlers to use the smart file ownership detection.
 Implement this interface in your handlers to use the smart file ownership detection.
 
 ## Performance & Caching

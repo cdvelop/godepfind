@@ -1,6 +1,7 @@
 package godepfind
 
 import (
+	"fmt"
 	"go/build"
 	"os"
 	"os/exec"
@@ -13,7 +14,7 @@ type GoDepFind struct {
 	testImports bool
 
 	// Cache fields
-	CachedModule    bool
+	cachedModule    bool
 	packageCache    map[string]*build.Package
 	dependencyGraph map[string][]string // pkg -> dependencies
 	reverseDeps     map[string][]string // pkg -> reverse dependencies
@@ -29,13 +30,49 @@ func New(rootDir string) *GoDepFind {
 	return &GoDepFind{
 		rootDir:         rootDir,
 		testImports:     false,
-		CachedModule:    false,
+		cachedModule:    false,
 		packageCache:    make(map[string]*build.Package),
 		dependencyGraph: make(map[string][]string),
 		reverseDeps:     make(map[string][]string),
 		fileToPackage:   make(map[string]string),
 		mainPackages:    []string{},
 	}
+}
+
+// DepHandler interface for handlers that manage specific main files
+// DepHandler interface for handlers that manage specific main files
+type DepHandler interface {
+	Name() string         // handler name: wasmH, serverHttp, cliApp
+	MainFilePath() string // eg: web/main.server.go, web/main.wasm.go
+}
+
+// ThisFileIsMine determines if a file belongs to a specific handler using dependency analysis
+func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error) {
+	if dh == nil {
+		return false, fmt.Errorf("handler cannot be nil")
+	}
+
+	// Update cache based on file changes when queried
+	if err := g.updateCacheForFile(fileName, filePath, event); err != nil {
+		return false, fmt.Errorf("cache update failed: %w", err)
+	}
+
+	// Use optimized GoFileComesFromMain to find which main packages depend on this file
+	mainPackages, err := g.GoFileComesFromMain(fileName)
+	if err != nil {
+		return false, fmt.Errorf("dependency analysis failed: %w", err)
+	}
+
+	// Check if any main package matches handler's managed file
+	handlerFile := dh.MainFilePath()
+	for _, mainPkg := range mainPackages {
+		// Compare main package with handler's managed file
+		if g.matchesHandlerFile(mainPkg, handlerFile) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // SetTestImports enables or disables inclusion of test imports

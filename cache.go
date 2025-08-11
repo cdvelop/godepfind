@@ -6,43 +6,6 @@ import (
 	"strings"
 )
 
-// DepHandler interface for handlers that manage specific main files
-type DepHandler interface {
-	Name() string              // handler name: wasmH, serverHttp, cliApp
-	UnobservedFiles() []string // main handler files: main.go, main.wasm.go
-}
-
-// ThisFileIsMine determines if a file belongs to a specific handler using dependency analysis
-func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error) {
-	if dh == nil {
-		return false, fmt.Errorf("handler cannot be nil")
-	}
-
-	// Update cache based on file changes when queried
-	if err := g.updateCacheForFile(fileName, filePath, event); err != nil {
-		return false, fmt.Errorf("cache update failed: %w", err)
-	}
-
-	// Use optimized GoFileComesFromMain to find which main packages depend on this file
-	mainPackages, err := g.GoFileComesFromMain(fileName)
-	if err != nil {
-		return false, fmt.Errorf("dependency analysis failed: %w", err)
-	}
-
-	// Check if any main package matches handler's managed files
-	handlerFiles := dh.UnobservedFiles()
-	for _, mainPkg := range mainPackages {
-		for _, handlerFile := range handlerFiles {
-			// Compare main package with handler's managed files
-			if g.matchesHandlerFile(mainPkg, handlerFile) {
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
-}
-
 // matchesHandlerFile checks if a main package matches a handler's managed file
 func (g *GoDepFind) matchesHandlerFile(mainPkg, handlerFile string) bool {
 	// Extract base name from main package path
@@ -99,7 +62,7 @@ func (g *GoDepFind) updateCacheForFile(fileName, filePath, event string) error {
 
 // ensureCacheInitialized initializes cache if not already done (lazy loading)
 func (g *GoDepFind) ensureCacheInitialized() error {
-	if !g.CachedModule {
+	if !g.cachedModule {
 		return g.rebuildCache()
 	}
 	return nil
@@ -239,7 +202,7 @@ func (g *GoDepFind) rebuildCache() error {
 	}
 
 	// 6. Mark cache as initialized
-	g.CachedModule = true
+	g.cachedModule = true
 
 	return nil
 }

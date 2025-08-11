@@ -9,7 +9,7 @@ func BenchmarkGoFileComesFromMainWithoutCache(b *testing.B) {
 	// Create fresh instances each time to avoid cache
 	for i := 0; i < b.N; i++ {
 		finder := New("testproject")
-		finder.CachedModule = false // Ensure cache is disabled
+		finder.cachedModule = false // Ensure cache is disabled
 
 		// Test with module1.go which has dependencies
 		_, err := finder.GoFileComesFromMain("module1.go")
@@ -44,13 +44,13 @@ func BenchmarkGoFileComesFromMainWithCache(b *testing.B) {
 // BenchmarkThisFileIsMineWithoutCache tests ThisFileIsMine without cache
 func BenchmarkThisFileIsMineWithoutCache(b *testing.B) {
 	handler := &MockHandler{
-		name:            "testHandler",
-		unobservedFiles: []string{"appAserver", "main.go"},
+		name:         "testHandler",
+		mainFilePath: "appAserver",
 	}
 
 	for i := 0; i < b.N; i++ {
 		finder := New("testproject")
-		finder.CachedModule = false // Ensure cache is disabled
+		finder.cachedModule = false // Ensure cache is disabled
 
 		_, err := finder.ThisFileIsMine(handler, "module1.go", "./modules/module1/module1.go", "write")
 		if err != nil {
@@ -63,8 +63,8 @@ func BenchmarkThisFileIsMineWithoutCache(b *testing.B) {
 func BenchmarkThisFileIsMineWithCache(b *testing.B) {
 	finder := New("testproject")
 	handler := &MockHandler{
-		name:            "testHandler",
-		unobservedFiles: []string{"appAserver", "main.go"},
+		name:         "testHandler",
+		mainFilePath: "appAserver",
 	}
 
 	// Warm up cache
@@ -87,7 +87,7 @@ func BenchmarkThisFileIsMineWithCache(b *testing.B) {
 func BenchmarkCacheInitialization(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		finder := New("testproject")
-		finder.CachedModule = false
+		finder.cachedModule = false
 
 		err := finder.ensureCacheInitialized()
 		if err != nil {
@@ -125,7 +125,7 @@ func BenchmarkMultipleFilesWithoutCache(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, file := range files {
 			finder := New("testproject")
-			finder.CachedModule = false
+			finder.cachedModule = false
 
 			_, err := finder.GoFileComesFromMain(file)
 			if err != nil {
@@ -140,9 +140,9 @@ func BenchmarkRealWorldScenario(b *testing.B) {
 	finder := New("testproject")
 
 	handlers := []*MockHandler{
-		{name: "serverHandler", unobservedFiles: []string{"appAserver"}},
-		{name: "cmdHandler", unobservedFiles: []string{"appBcmd"}},
-		{name: "wasmHandler", unobservedFiles: []string{"appCwasm"}},
+		{name: "serverHandler", mainFilePath: "appAserver"},
+		{name: "cmdHandler", mainFilePath: "appBcmd"},
+		{name: "wasmHandler", mainFilePath: "appCwasm"},
 	}
 
 	files := []string{"module1.go", "module2.go", "module3.go", "module4.go"}

@@ -5,17 +5,18 @@ import (
 )
 
 // MockHandler for testing
+
 type MockHandler struct {
-	name            string
-	unobservedFiles []string
+	name         string
+	mainFilePath string
 }
 
 func (m *MockHandler) Name() string {
 	return m.name
 }
 
-func (m *MockHandler) UnobservedFiles() []string {
-	return m.unobservedFiles
+func (m *MockHandler) MainFilePath() string {
+	return m.mainFilePath
 }
 
 func TestThisFileIsMine(t *testing.T) {
@@ -24,18 +25,18 @@ func TestThisFileIsMine(t *testing.T) {
 
 	// Create mock handlers that match the real testproject structure
 	serverHandler := &MockHandler{
-		name:            "serverHandler",
-		unobservedFiles: []string{"main.go"},
+		name:         "serverHandler",
+		mainFilePath: "main.go",
 	}
 
 	cmdHandler := &MockHandler{
-		name:            "cmdHandler",
-		unobservedFiles: []string{"main.go"},
+		name:         "cmdHandler",
+		mainFilePath: "main.go",
 	}
 
 	wasmHandler := &MockHandler{
-		name:            "wasmHandler",
-		unobservedFiles: []string{"main.go"},
+		name:         "wasmHandler",
+		mainFilePath: "main.go",
 	}
 
 	// Test with a nil handler
@@ -101,7 +102,7 @@ func TestCacheInitialization(t *testing.T) {
 	finder := New("testproject") // Use testproject like existing tests
 
 	// Initially cache should not be initialized
-	if finder.CachedModule {
+	if finder.cachedModule {
 		t.Error("Cache should not be initialized initially")
 	}
 
@@ -138,7 +139,7 @@ func TestCacheInitialization(t *testing.T) {
 	}
 
 	// After successful initialization, cache should be marked as initialized
-	if err == nil && !finder.CachedModule {
+	if err == nil && !finder.cachedModule {
 		t.Error("Cache should be marked as initialized after successful rebuild")
 	}
 }
