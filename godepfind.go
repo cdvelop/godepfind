@@ -48,8 +48,13 @@ type DepHandler interface {
 
 // ThisFileIsMine determines if a file belongs to a specific handler using dependency analysis
 func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error) {
-	if dh == nil {
-		return false, fmt.Errorf("handler cannot be nil")
+	// Validate input before processing
+	shouldProcess, err := g.ValidateInputForProcessing(dh, fileName, filePath)
+	if err != nil {
+		return false, err
+	}
+	if !shouldProcess {
+		return false, nil
 	}
 
 	// Update cache based on file changes when queried
