@@ -14,12 +14,13 @@ type GoDepFind struct {
 	testImports bool
 
 	// Cache fields
-	cachedModule    bool
-	packageCache    map[string]*build.Package
-	dependencyGraph map[string][]string // pkg -> dependencies
-	reverseDeps     map[string][]string // pkg -> reverse dependencies
-	fileToPackage   map[string]string   // filename -> package path
-	mainPackages    []string
+	cachedModule      bool
+	packageCache      map[string]*build.Package
+	dependencyGraph   map[string][]string // pkg -> dependencies
+	reverseDeps       map[string][]string // pkg -> reverse dependencies
+	filePathToPackage map[string]string   // absolute file path -> package path (NEW: unique mapping)
+	fileToPackages    map[string][]string // filename -> list of package paths (NEW: multiple packages per filename)
+	mainPackages      []string
 }
 
 // New creates a new GoDepFind instance with the specified root directory
@@ -28,25 +29,25 @@ func New(rootDir string) *GoDepFind {
 		rootDir = "."
 	}
 	return &GoDepFind{
-		rootDir:         rootDir,
-		testImports:     false,
-		cachedModule:    false,
-		packageCache:    make(map[string]*build.Package),
-		dependencyGraph: make(map[string][]string),
-		reverseDeps:     make(map[string][]string),
-		fileToPackage:   make(map[string]string),
-		mainPackages:    []string{},
+		rootDir:           rootDir,
+		testImports:       false,
+		cachedModule:      false,
+		packageCache:      make(map[string]*build.Package),
+		dependencyGraph:   make(map[string][]string),
+		reverseDeps:       make(map[string][]string),
+		filePathToPackage: make(map[string]string),
+		fileToPackages:    make(map[string][]string),
+		mainPackages:      []string{},
 	}
 }
 
-// DepHandler interface for handlers that manage specific main files
-// DepHandler interface for handlers that manage specific main files
+// DepHandler interface for handlers that manage specific main packages
 type DepHandler interface {
 	Name() string         // handler name: wasmH, serverHttp, cliApp
-	MainFilePath() string // eg: web/main.server.go, web/main.wasm.go
+	MainFilePath() string // package identifier: "appAserver", "appBcmd", "appCwasm", etc.
 }
 
-// ThisFileIsMine determines if a file belongs to a specific handler using dependency analysis
+// ThisFileIsMine determines if a file belongs to a specific handler using path-based resolution
 func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error) {
 	// Validate input before processing
 	shouldProcess, err := g.ValidateInputForProcessing(dh, fileName, filePath)
@@ -62,17 +63,47 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event stri
 		return false, fmt.Errorf("cache update failed: %w", err)
 	}
 
-	// Use optimized GoFileComesFromMain to find which main packages depend on this file
-	mainPackages, err := g.GoFileComesFromMain(fileName)
-	if err != nil {
-		return false, fmt.Errorf("dependency analysis failed: %w", err)
+	// Ensure cache is initialized
+	if err := g.ensureCacheInitialized(); err != nil {
+		return false, err
 	}
 
-	// Check if any main package matches handler's managed file
 	handlerFile := dh.MainFilePath()
-	for _, mainPkg := range mainPackages {
-		// Compare main package with handler's managed file
-		if g.matchesHandlerFile(mainPkg, handlerFile) {
+
+	// Unified logic: Use path-based resolution to find target package
+	var targetPkg string
+	if filePath != "" {
+		// Use exact path resolution when available (priority)
+		if absPath, err := filepath.Abs(filePath); err == nil {
+			// Convert to relative path for cache lookup
+			relPath, err := filepath.Rel(g.rootDir, absPath)
+			if err != nil {
+				relPath = filePath // fallback to original
+			}
+			if pkg, exists := g.filePathToPackage[relPath]; exists {
+				targetPkg = pkg
+			}
+		}
+	}
+
+	// If no exact path match, find packages containing the file
+	if targetPkg == "" {
+		packages := g.fileToPackages[fileName]
+		if len(packages) == 0 {
+			return false, nil // File not found in any package
+		}
+		// Use the first package (path resolution should handle disambiguation)
+		targetPkg = packages[0]
+	}
+
+	// Check if this is a main package that matches the handler
+	if g.isMainPackage(targetPkg) && g.matchesHandlerFile(targetPkg, handlerFile) {
+		return true, nil
+	}
+
+	// Check if any main package imports this target package and matches the handler
+	for _, mainPath := range g.mainPackages {
+		if g.cachedMainImportsPackage(mainPath, targetPkg) && g.matchesHandlerFile(mainPath, handlerFile) {
 			return true, nil
 		}
 	}
@@ -225,21 +256,34 @@ func (g *GoDepFind) GoFileComesFromMain(fileName string) ([]string, error) {
 		return nil, err
 	}
 
-	// Find the package containing the file using cache
-	filePkg, exists := g.fileToPackage[fileName]
-	if !exists || filePkg == "" {
-		return []string{}, nil // File not found or not in any package
+	// Find packages containing the file using new cache structure
+	candidatePackages := g.fileToPackages[fileName]
+	if len(candidatePackages) == 0 {
+		return []string{}, nil // File not found in any package
 	}
 
-	// Check which main packages import the file's package using cached data
+	// Check which main packages import any of the candidate packages using cached data
 	var result []string
 	for _, mainPath := range g.mainPackages {
-		if g.cachedMainImportsPackage(mainPath, filePkg) {
-			result = append(result, mainPath)
+		for _, filePkg := range candidatePackages {
+			if g.cachedMainImportsPackage(mainPath, filePkg) {
+				result = append(result, mainPath)
+				break // Don't add the same main package multiple times
+			}
 		}
 	}
 
 	return result, nil
+}
+
+// isMainPackage checks if a package is a main package
+func (g *GoDepFind) isMainPackage(pkgPath string) bool {
+	for _, mp := range g.mainPackages {
+		if mp == pkgPath {
+			return true
+		}
+	}
+	return false
 }
 
 // findMainPackages finds all packages with main function
@@ -299,4 +343,99 @@ func (g *GoDepFind) findPackageContainingFile(fileName string) (string, error) {
 	}
 
 	return "", nil // File not found in any package
+}
+
+// findPackageContainingFileByPath finds which package contains the given file path.
+// It first tries the cached package info (packageCache) and falls back to
+// scanning packages if cache is not available.
+func (g *GoDepFind) findPackageContainingFileByPath(filePath string) (string, error) {
+	// Ensure cache is initialized
+	if err := g.ensureCacheInitialized(); err != nil {
+		return "", err
+	}
+
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	// Prefer cached lookup
+	if len(g.packageCache) > 0 {
+		for pkgPath, pkg := range g.packageCache {
+			if pkg == nil {
+				continue
+			}
+			for _, file := range pkg.GoFiles {
+				candidate := file
+				if !filepath.IsAbs(candidate) {
+					candidate = filepath.Join(pkg.Dir, file)
+				}
+				candAbs, err := filepath.Abs(candidate)
+				if err != nil {
+					continue
+				}
+				if candAbs == absPath {
+					return pkgPath, nil
+				}
+			}
+			if g.testImports {
+				for _, file := range pkg.TestGoFiles {
+					candidate := file
+					if !filepath.IsAbs(candidate) {
+						candidate = filepath.Join(pkg.Dir, file)
+					}
+					candAbs, err := filepath.Abs(candidate)
+					if err != nil {
+						continue
+					}
+					if candAbs == absPath {
+						return pkgPath, nil
+					}
+				}
+				for _, file := range pkg.XTestGoFiles {
+					candidate := file
+					if !filepath.IsAbs(candidate) {
+						candidate = filepath.Join(pkg.Dir, file)
+					}
+					candAbs, err := filepath.Abs(candidate)
+					if err != nil {
+						continue
+					}
+					if candAbs == absPath {
+						return pkgPath, nil
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback: scan all packages
+	allPaths, err := g.listPackages("./...")
+	if err != nil {
+		return "", err
+	}
+	packages, err := g.getPackages(allPaths)
+	if err != nil {
+		return "", err
+	}
+	for path, pkg := range packages {
+		if pkg == nil {
+			continue
+		}
+		for _, file := range pkg.GoFiles {
+			candidate := file
+			if !filepath.IsAbs(candidate) {
+				candidate = filepath.Join(pkg.Dir, file)
+			}
+			candAbs, err := filepath.Abs(candidate)
+			if err != nil {
+				continue
+			}
+			if candAbs == absPath {
+				return path, nil
+			}
+		}
+	}
+
+	return "", nil
 }

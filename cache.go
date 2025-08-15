@@ -70,8 +70,10 @@ func (g *GoDepFind) ensureCacheInitialized() error {
 
 // invalidatePackageCache invalidates cache for a specific package
 func (g *GoDepFind) invalidatePackageCache(fileName string) error {
-	// Find package containing the file
-	if pkg, exists := g.fileToPackage[fileName]; exists {
+	// Find ALL packages containing this filename
+	packages := g.fileToPackages[fileName]
+
+	for _, pkg := range packages {
 		// Remove from caches
 		delete(g.packageCache, pkg)
 		delete(g.dependencyGraph, pkg)
@@ -93,30 +95,66 @@ func (g *GoDepFind) invalidatePackageCache(fileName string) error {
 
 // handleFileCreate handles file creation events
 func (g *GoDepFind) handleFileCreate(fileName, filePath string) error {
-	// Find which package this file belongs to
-	pkg, err := g.findPackageContainingFile(fileName)
-	if err != nil {
-		return err
+	if filePath != "" {
+		pkg, err := g.findPackageContainingFileByPath(filePath)
+		if err != nil {
+			return err
+		}
+
+		if pkg != "" {
+			// Update path mapping
+			if absPath, err := filepath.Abs(filePath); err == nil {
+				g.filePathToPackage[absPath] = pkg
+			}
+
+			// Add to filename mapping (don't overwrite, append if not exists)
+			if !contains(g.fileToPackages[fileName], pkg) {
+				g.fileToPackages[fileName] = append(g.fileToPackages[fileName], pkg)
+			}
+
+			return g.invalidatePackageCache(fileName)
+		}
 	}
-
-	if pkg != "" {
-		// Update fileToPackage mapping
-		g.fileToPackage[fileName] = pkg
-
-		// Invalidate package cache to force re-scan
-		return g.invalidatePackageCache(fileName)
-	}
-
 	return nil
 }
 
 // handleFileRemove handles file removal events
 func (g *GoDepFind) handleFileRemove(fileName, filePath string) error {
-	// Remove from fileToPackage mapping
-	delete(g.fileToPackage, fileName)
+	// Remove from path mapping
+	if filePath != "" {
+		if absPath, err := filepath.Abs(filePath); err == nil {
+			delete(g.filePathToPackage, absPath)
+		}
+	}
 
-	// Invalidate package cache
+	// Remove from filename mapping requires package lookup first
+	if filePath != "" {
+		pkg, _ := g.findPackageContainingFileByPath(filePath)
+		if pkg != "" {
+			g.fileToPackages[fileName] = removeString(g.fileToPackages[fileName], pkg)
+		}
+	}
+
 	return g.invalidatePackageCache(fileName)
+}
+
+// Helper functions
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(slice []string, item string) []string {
+	for i, s := range slice {
+		if s == item {
+			return append(slice[:i], slice[i+1:]...)
+		}
+	}
+	return slice
 }
 
 // rebuildCache rebuilds the entire cache from scratch
@@ -169,25 +207,35 @@ func (g *GoDepFind) rebuildCache() error {
 		}
 	}
 
-	// 4. Build fileToPackage mapping
-	g.fileToPackage = make(map[string]string)
+	// 4. Build file-to-package mappings
+	g.filePathToPackage = make(map[string]string)
+	g.fileToPackages = make(map[string][]string)
 	for pkgPath, pkg := range packages {
 		if pkg != nil {
-			// Map Go files
+			// Map Go files by absolute path AND collect by filename
 			for _, file := range pkg.GoFiles {
+				// Absolute path mapping (unique)
+				absPath := filepath.Join(pkg.Dir, file)
+				g.filePathToPackage[absPath] = pkgPath
+
+				// Filename mapping (may have multiple packages)
 				fileName := filepath.Base(file)
-				g.fileToPackage[fileName] = pkgPath
+				g.fileToPackages[fileName] = append(g.fileToPackages[fileName], pkgPath)
 			}
 
 			// Map test files if enabled
 			if g.testImports {
 				for _, file := range pkg.TestGoFiles {
+					absPath := filepath.Join(pkg.Dir, file)
+					g.filePathToPackage[absPath] = pkgPath
 					fileName := filepath.Base(file)
-					g.fileToPackage[fileName] = pkgPath
+					g.fileToPackages[fileName] = append(g.fileToPackages[fileName], pkgPath)
 				}
 				for _, file := range pkg.XTestGoFiles {
+					absPath := filepath.Join(pkg.Dir, file)
+					g.filePathToPackage[absPath] = pkgPath
 					fileName := filepath.Base(file)
-					g.fileToPackage[fileName] = pkgPath
+					g.fileToPackages[fileName] = append(g.fileToPackages[fileName], pkgPath)
 				}
 			}
 		}

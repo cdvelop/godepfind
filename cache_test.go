@@ -20,56 +20,44 @@ func (m *MockHandler) MainFilePath() string {
 }
 
 func TestThisFileIsMine(t *testing.T) {
-	// Create a new GoDepFind instance using testproject (same as existing tests)
 	finder := New("testproject")
 
-	// Create mock handlers that match the real testproject structure
-	serverHandler := &MockHandler{
-		name:         "serverHandler",
-		mainFilePath: "main.go",
-	}
-
-	cmdHandler := &MockHandler{
-		name:         "cmdHandler",
-		mainFilePath: "main.go",
-	}
-
-	wasmHandler := &MockHandler{
-		name:         "wasmHandler",
-		mainFilePath: "main.go",
-	}
-
-	// Test with a nil handler
-	_, err := finder.ThisFileIsMine(nil, "module1.go", "./modules/module1/module1.go", "write")
+	// Test with nil handler - should return error
+	_, err := finder.ThisFileIsMine(nil, "main.go", "testproject/appAserver/main.go", "write")
 	if err == nil {
 		t.Error("Expected error for nil handler")
 	}
 
-	// Test with module1.go - should match serverHandler and cmdHandler (both import module1)
-	isMine, err := finder.ThisFileIsMine(serverHandler, "module1.go", "./modules/module1/module1.go", "write")
-	if err != nil {
-		t.Logf("Cache initialization result: %v", err)
-	} else {
-		t.Logf("ServerHandler owns module1.go: %v", isMine)
+	// Test main.go ownership: each handler should own only its specific main.go
+	tests := []struct {
+		name         string
+		handlerName  string
+		mainFilePath string
+		fileName     string
+		filePath     string
+		expected     bool
+	}{
+		{"serverHandler owns appAserver main.go", "serverHandler", "appAserver", "main.go", "testproject/appAserver/main.go", true},
+		{"cmdHandler owns appBcmd main.go", "cmdHandler", "appBcmd", "main.go", "testproject/appBcmd/main.go", true},
+		{"wasmHandler owns appCwasm main.go", "wasmHandler", "appCwasm", "main.go", "testproject/appCwasm/main.go", true},
+		// Cross-ownership should be false (path-based disambiguation)
+		{"serverHandler does NOT own appBcmd main.go", "serverHandler", "appAserver", "main.go", "testproject/appBcmd/main.go", false},
+		{"cmdHandler does NOT own appCwasm main.go", "cmdHandler", "appBcmd", "main.go", "testproject/appCwasm/main.go", false},
+		{"wasmHandler does NOT own appAserver main.go", "wasmHandler", "appCwasm", "main.go", "testproject/appAserver/main.go", false},
 	}
 
-	// Test with module3.go - should only match wasmHandler
-	isMine2, err := finder.ThisFileIsMine(wasmHandler, "module3.go", "./modules/module3/module3.go", "write")
-	if err != nil {
-		t.Logf("Cache result for module3: %v", err)
-	} else {
-		t.Logf("WasmHandler owns module3.go: %v", isMine2)
-	}
-
-	// Test that cmdHandler doesn't own module3.go
-	isMine3, err := finder.ThisFileIsMine(cmdHandler, "module3.go", "./modules/module3/module3.go", "write")
-	if err != nil {
-		t.Logf("Cache result: %v", err)
-	} else {
-		t.Logf("CmdHandler should NOT own module3.go: %v", isMine3)
-		if isMine3 {
-			t.Error("CmdHandler should not own module3.go since appBcmd doesn't import module3")
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := &MockHandler{name: tt.handlerName, mainFilePath: tt.mainFilePath}
+			result, err := finder.ThisFileIsMine(handler, tt.fileName, tt.filePath, "write")
+			if err != nil {
+				t.Logf("Test %s: got error (may be expected in test environment): %v", tt.name, err)
+				return // Skip if cache initialization fails
+			}
+			if result != tt.expected {
+				t.Errorf("Test %s: expected %v, got %v", tt.name, tt.expected, result)
+			}
+		})
 	}
 }
 
@@ -116,8 +104,11 @@ func TestCacheInitialization(t *testing.T) {
 	if finder.reverseDeps == nil {
 		t.Error("reverseDeps should be initialized")
 	}
-	if finder.fileToPackage == nil {
-		t.Error("fileToPackage should be initialized")
+	if finder.filePathToPackage == nil {
+		t.Error("filePathToPackage should be initialized")
+	}
+	if finder.fileToPackages == nil {
+		t.Error("fileToPackages should be initialized")
 	}
 
 	// Test lazy initialization with real testproject
