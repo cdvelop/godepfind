@@ -11,25 +11,34 @@ func (g *GoDepFind) matchesHandlerFile(mainPkg, handlerFile string) bool {
 	// Extract base name from main package path
 	baseName := filepath.Base(mainPkg)
 
-	// Direct match
-	if baseName == handlerFile {
+	// Extract filename from handler file (in case it's a full path)
+	handlerFileName := filepath.Base(handlerFile)
+
+	// Direct match with package base name (for cases like "appAserver")
+	if baseName == handlerFile || baseName == handlerFileName {
 		return true
 	}
 
-	// Check if handler file pattern matches main package
-	// e.g., "main.server.go" matches packages containing "server"
-	if strings.Contains(handlerFile, ".") {
-		parts := strings.SplitSeq(handlerFile, ".")
-		for part := range parts {
-			if part != "main" && part != "go" && strings.Contains(mainPkg, part) {
+	// Extract the base name without extension from handler file
+	handlerBase := strings.TrimSuffix(handlerFileName, filepath.Ext(handlerFileName))
+
+	// Check if main package contains the handler base name
+	// e.g., "main.server.go" -> "main.server", check if package contains "server"
+	if strings.Contains(handlerBase, ".") {
+		parts := strings.Split(handlerBase, ".")
+		for _, part := range parts {
+			if part != "main" && part != "" && strings.Contains(mainPkg, part) {
 				return true
 			}
 		}
 	}
 
-	// Check if main package contains handler file (without extension)
-	handlerBase := strings.TrimSuffix(handlerFile, filepath.Ext(handlerFile))
-	return strings.Contains(mainPkg, handlerBase)
+	// Check if main package contains handler base (without extension)
+	if handlerBase != "" && handlerBase != "main" && strings.Contains(mainPkg, handlerBase) {
+		return true
+	}
+
+	return false
 }
 
 // updateCacheForFile updates cache based on file events

@@ -63,14 +63,45 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event stri
 		return false, fmt.Errorf("cache update failed: %w", err)
 	}
 
-	// Ensure cache is initialized
-	if err := g.ensureCacheInitialized(); err != nil {
-		return false, err
-	}
-
 	handlerFile := dh.MainFilePath()
 
-	// Unified logic: Use path-based resolution to find target package
+	// FIRST: Direct file comparison - check if handler manages this specific file
+	if filePath != "" && handlerFile != "" {
+		// Extract the filename from handler's MainFilePath for comparison
+		handlerFileName := filepath.Base(handlerFile)
+
+		// If the filenames match, check if they're in the same relative path
+		if fileName == handlerFileName {
+			// Get the relative path from the project root
+			relativeFilePath := strings.TrimPrefix(filePath, g.rootDir+"/")
+
+			// Compare with handler's MainFilePath
+			if relativeFilePath == handlerFile {
+				return true, nil
+			}
+		}
+
+		// Also try absolute path comparison as fallback
+		if absFilePath, err := filepath.Abs(filePath); err == nil {
+			if absHandlerPath, err := filepath.Abs(handlerFile); err == nil {
+				if absFilePath == absHandlerPath {
+					return true, nil
+				}
+			}
+
+			// Try relative path from root
+			if !filepath.IsAbs(handlerFile) {
+				handlerAbsPath := filepath.Join(g.rootDir, handlerFile)
+				if absHandlerPath, err := filepath.Abs(handlerAbsPath); err == nil {
+					if absFilePath == absHandlerPath {
+						return true, nil
+					}
+				}
+			}
+		}
+	}
+
+	// SECOND: Package-based resolution for files that aren't directly managed
 	var targetPkg string
 	if filePath != "" {
 		// Use exact path resolution when available (priority)
