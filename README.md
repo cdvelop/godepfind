@@ -198,29 +198,6 @@ The `ThisFileIsMine` function has strict validation requirements for the `filePa
 
 This validation ensures **deterministic file ownership** by preventing ambiguity between files with the same name in different directories.
 
-## Recent Changes
-
-### v3.0 API Simplification
-
-The `ThisFileIsMine` method has been restructured for better clarity and to eliminate ambiguity by removing the `DepHandler` interface.
-
-#### Changes Made:
-- **Removed `DepHandler` interface**: The `mainFilePath` is now passed directly to `ThisFileIsMine`.
-- **Simplified `ThisFileIsMine` signature**: The signature is now `ThisFileIsMine(mainFilePath, filePath, event string)`.
-
-#### Migration Guide:
-```go
-// OLD API (deprecated)
-isMine, err := finder.ThisFileIsMine(handler, "./internal/db/database.go", "write")
-
-// NEW API (current)
-isMine, err := finder.ThisFileIsMine("app/server/main.go", "./internal/db/database.go", "write")
-```
-
-#### Breaking Changes:
-- `DepHandler` interface removed.
-- `ThisFileIsMine` signature changed to accept `mainFilePath` as a string.
-
 ## Performance & Caching
 
 
