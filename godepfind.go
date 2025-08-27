@@ -41,13 +41,8 @@ func New(rootDir string) *GoDepFind {
 	}
 }
 
-// DepHandler interface for handlers that manage specific main packages
-type DepHandler interface {
-	MainFilePath() string // path file ej: app/web/main.go
-}
-
 // ThisFileIsMine determines if a file belongs to a specific handler using path-based resolution
-func (g *GoDepFind) ThisFileIsMine(dh DepHandler, filePath, event string) (bool, error) {
+func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error) {
 	// Validar que filePath no sea solo un archivo sin ruta
 	if filePath == "" {
 		return false, fmt.Errorf("filePath cannot be empty")
@@ -61,7 +56,7 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, filePath, event string) (bool,
 	fileName := filepath.Base(filePath)
 
 	// Validate input before processing
-	shouldProcess, err := g.ValidateInputForProcessing(dh, fileName, filePath)
+	shouldProcess, err := g.ValidateInputForProcessing(mainFilePath, fileName, filePath)
 	if err != nil {
 		return false, err
 	}
@@ -74,9 +69,9 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, filePath, event string) (bool,
 		return false, fmt.Errorf("cache update failed: %w", err)
 	}
 
-	handlerFile := dh.MainFilePath()
+	handlerFile := mainFilePath
 	if handlerFile == "" {
-		return false, fmt.Errorf("handler MainFilePath cannot be empty")
+		return false, fmt.Errorf("handler mainFilePath cannot be empty")
 	}
 
 	// FIRST: Direct file comparison - check if handler manages this specific file

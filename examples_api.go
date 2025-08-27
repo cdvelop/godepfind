@@ -4,9 +4,9 @@ package godepfind
 
 // FindReverseDepsForFile finds reverse dependencies for a specific file with validation
 // This is an example of how to reuse the validation function in other public APIs
-func (g *GoDepFind) FindReverseDepsForFile(dh DepHandler, fileName, filePath string) ([]string, error) {
+func (g *GoDepFind) FindReverseDepsForFile(mainFilePath, fileName, filePath string) ([]string, error) {
 	// Reuse centralized validation
-	shouldProcess, err := g.ValidateInputForProcessing(dh, fileName, filePath)
+	shouldProcess, err := g.ValidateInputForProcessing(mainFilePath, fileName, filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -29,9 +29,9 @@ func (g *GoDepFind) FindReverseDepsForFile(dh DepHandler, fileName, filePath str
 
 // CheckFileOwnership checks if a file belongs to a handler with validation
 // Another example of reusing the validation function
-func (g *GoDepFind) CheckFileOwnership(dh DepHandler, fileName, filePath string) (string, error) {
+func (g *GoDepFind) CheckFileOwnership(mainFilePath, fileName, filePath string) (string, error) {
 	// Reuse centralized validation
-	shouldProcess, err := g.ValidateInputForProcessing(dh, fileName, filePath)
+	shouldProcess, err := g.ValidateInputForProcessing(mainFilePath, fileName, filePath)
 	if err != nil {
 		return "", err
 	}
@@ -40,7 +40,7 @@ func (g *GoDepFind) CheckFileOwnership(dh DepHandler, fileName, filePath string)
 	}
 
 	// Check ownership using existing logic
-	belongs, err := g.ThisFileIsMine(dh, filePath, "check")
+	belongs, err := g.ThisFileIsMine(mainFilePath, filePath, "check")
 	if err != nil {
 		return "", err
 	}
@@ -53,9 +53,9 @@ func (g *GoDepFind) CheckFileOwnership(dh DepHandler, fileName, filePath string)
 
 // AnalyzeFileImpact analyzes the impact of a file change with validation
 // Yet another example showing reusability
-func (g *GoDepFind) AnalyzeFileImpact(dh DepHandler, fileName, filePath, event string) (*FileImpactResult, error) {
+func (g *GoDepFind) AnalyzeFileImpact(mainFilePath, fileName, filePath, event string) (*FileImpactResult, error) {
 	// Reuse centralized validation
-	shouldProcess, err := g.ValidateInputForProcessing(dh, fileName, filePath)
+	shouldProcess, err := g.ValidateInputForProcessing(mainFilePath, fileName, filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (g *GoDepFind) AnalyzeFileImpact(dh DepHandler, fileName, filePath, event s
 		return nil, err
 	}
 
-	belongs, err := g.ThisFileIsMine(dh, filePath, event)
+	belongs, err := g.ThisFileIsMine(mainFilePath, filePath, event)
 	if err != nil {
 		return nil, err
 	}

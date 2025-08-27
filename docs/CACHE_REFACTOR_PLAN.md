@@ -112,21 +112,21 @@ for pkgPath, pkg := range packages {
 
 **New simplified logic:**
 ```go
-func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error) {
+func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error) {
     // Validate and update cache (unchanged)
-    shouldProcess, err := g.ValidateInputForProcessing(dh, fileName, filePath)
+    shouldProcess, err := g.ValidateInputForProcessing(mainFilePath, filepath.Base(filePath), filePath)
     if err != nil || !shouldProcess {
         return false, err
     }
     
-    if err := g.updateCacheForFile(fileName, filePath, event); err != nil {
+    if err := g.updateCacheForFile(filepath.Base(filePath), filePath, event); err != nil {
         return false, fmt.Errorf("cache update failed: %w", err)
     }
 
-    handlerFile := dh.MainFilePath()
+    handlerFile := mainFilePath
     
     // SIMPLIFIED LOGIC: Check if fileName matches handler's MainFilePath
-    if fileName == handlerFile {
+    if filepath.Base(filePath) == handlerFile {
         var candidatePackages []string
         
         // Priority 1: Use exact file path if available
@@ -140,7 +140,7 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event stri
         
         // Priority 2: Fallback to filename-based lookup
         if len(candidatePackages) == 0 {
-            candidatePackages = g.fileToPackages[fileName]
+            candidatePackages = g.fileToPackages[filepath.Base(filePath)]
         }
         
         // Check if any candidate package is a main package AND matches handler
@@ -152,7 +152,7 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event stri
     }
     
     // Fallback to existing dependency analysis logic (unchanged)
-    mainPackages, err := g.GoFileComesFromMain(fileName)
+    mainPackages, err := g.GoFileComesFromMain(filepath.Base(filePath))
     if err != nil {
         return false, fmt.Errorf("dependency analysis failed: %w", err)
     }
@@ -295,25 +295,23 @@ func TestMainFileOwnershipWithMultipleMainFiles(t *testing.T) {
     
     // Test each handler recognizes only its own main.go
     testCases := []struct {
-        handlerName string
         mainFilePath string
         filePath string
         expected bool
     }{
-        {"serverHandler", "main.go", "testproject/appAserver/main.go", true},
-        {"cmdHandler", "main.go", "testproject/appBcmd/main.go", true},
-        {"wasmHandler", "main.go", "testproject/appCwasm/main.go", true},
+        {"appAserver/main.go", "testproject/appAserver/main.go", true},
+        {"appBcmd/main.go", "testproject/appBcmd/main.go", true},
+        {"appCwasm/main.go", "testproject/appCwasm/main.go", true},
         // Cross-ownership should be false
-        {"serverHandler", "main.go", "testproject/appBcmd/main.go", false},
-        {"cmdHandler", "main.go", "testproject/appCwasm/main.go", false},
+        {"appAserver/main.go", "testproject/appBcmd/main.go", false},
+        {"appBcmd/main.go", "testproject/appCwasm/main.go", false},
     }
     
     for _, tc := range testCases {
-        handler := &MockHandler{name: tc.handlerName, mainFilePath: tc.mainFilePath}
-        result, err := finder.ThisFileIsMine(handler, "main.go", tc.filePath, "write")
+        result, err := finder.ThisFileIsMine(tc.mainFilePath, tc.filePath, "write")
         require.NoError(t, err)
         assert.Equal(t, tc.expected, result, 
-            "Handler %s should %s own %s", tc.handlerName, 
+            "Main file %s should %s own %s", tc.mainFilePath,
             map[bool]string{true: "", false: "NOT"}[tc.expected], tc.filePath)
     }
 }
@@ -325,14 +323,14 @@ func TestFilePathDisambiguation(t *testing.T) {
     finder := New("testproject")
     
     // Create handler that manages specific main package
-    handler := &MockHandler{name: "appAHandler", mainFilePath: "appAserver"}
+    mainFilePath := "appAserver/main.go"
     
     // Should return true for appAserver/main.go only
-    result, err := finder.ThisFileIsMine(handler, "main.go", "testproject/appAserver/main.go", "write")
+    result, err := finder.ThisFileIsMine(mainFilePath, "testproject/appAserver/main.go", "write")
     assert.True(t, result)
     
     // Should return false for other main.go files
-    result, err = finder.ThisFileIsMine(handler, "main.go", "testproject/appBcmd/main.go", "write")
+    result, err = finder.ThisFileIsMine(mainFilePath, "testproject/appBcmd/main.go", "write")
     assert.False(t, result)
 }
 ```

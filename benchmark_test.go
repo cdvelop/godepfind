@@ -43,15 +43,13 @@ func BenchmarkGoFileComesFromMainWithCache(b *testing.B) {
 
 // BenchmarkThisFileIsMineWithoutCache tests ThisFileIsMine without cache
 func BenchmarkThisFileIsMineWithoutCache(b *testing.B) {
-	handler := &MockHandler{
-		mainFilePath: "appAserver",
-	}
+	mainFilePath := "appAserver/main.go"
 
 	for i := 0; i < b.N; i++ {
 		finder := New("testproject")
 		finder.cachedModule = false // Ensure cache is disabled
 
-		_, err := finder.ThisFileIsMine(handler, "./modules/module1/module1.go", "write")
+		_, err := finder.ThisFileIsMine(mainFilePath, "./modules/module1/module1.go", "write")
 		if err != nil {
 			b.Fatalf("ThisFileIsMine failed: %v", err)
 		}
@@ -61,12 +59,10 @@ func BenchmarkThisFileIsMineWithoutCache(b *testing.B) {
 // BenchmarkThisFileIsMineWithCache tests ThisFileIsMine with cache
 func BenchmarkThisFileIsMineWithCache(b *testing.B) {
 	finder := New("testproject")
-	handler := &MockHandler{
-		mainFilePath: "appAserver",
-	}
+	mainFilePath := "appAserver/main.go"
 
 	// Warm up cache
-	_, err := finder.ThisFileIsMine(handler, "./modules/module1/module1.go", "write")
+	_, err := finder.ThisFileIsMine(mainFilePath, "./modules/module1/module1.go", "write")
 	if err != nil {
 		b.Fatalf("Cache warmup failed: %v", err)
 	}
@@ -74,7 +70,7 @@ func BenchmarkThisFileIsMineWithCache(b *testing.B) {
 	b.ResetTimer() // Reset timer after cache warmup
 
 	for i := 0; i < b.N; i++ {
-		_, err := finder.ThisFileIsMine(handler, "./modules/module1/module1.go", "write")
+		_, err := finder.ThisFileIsMine(mainFilePath, "./modules/module1/module1.go", "write")
 		if err != nil {
 			b.Fatalf("ThisFileIsMine failed: %v", err)
 		}
@@ -137,19 +133,19 @@ func BenchmarkMultipleFilesWithoutCache(b *testing.B) {
 func BenchmarkRealWorldScenario(b *testing.B) {
 	finder := New("testproject")
 
-	handlers := []*MockHandler{
-		{mainFilePath: "appAserver"},
-		{mainFilePath: "appBcmd"},
-		{mainFilePath: "appCwasm"},
+	mainFilePaths := []string{
+		"appAserver/main.go",
+		"appBcmd/main.go",
+		"appCwasm/main.go",
 	}
 
 	files := []string{"module1/module1.go", "module2/module2.go", "module3/module3.go", "module4/module4.go"}
 	events := []string{"write", "create", "remove"}
 
 	// Warm up cache
-	for _, handler := range handlers {
+	for _, mainFilePath := range mainFilePaths {
 		for _, file := range files {
-			_, _ = finder.ThisFileIsMine(handler, "modules/"+file, "write")
+			_, _ = finder.ThisFileIsMine(mainFilePath, "modules/"+file, "write")
 		}
 	}
 
@@ -157,11 +153,11 @@ func BenchmarkRealWorldScenario(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		// Simulate multiple handlers checking file ownership
-		handler := handlers[i%len(handlers)]
+		mainFilePath := mainFilePaths[i%len(mainFilePaths)]
 		file := files[i%len(files)]
 		event := events[i%len(events)]
 
-		_, err := finder.ThisFileIsMine(handler, "modules/"+file, event)
+		_, err := finder.ThisFileIsMine(mainFilePath, "modules/"+file, event)
 		if err != nil {
 			b.Fatalf("Real world scenario failed: %v", err)
 		}

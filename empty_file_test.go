@@ -6,15 +6,6 @@ import (
 	"testing"
 )
 
-// MockDepHandler implements DepHandler for testing
-type MockDepHandler struct {
-	mainFilePath string
-}
-
-func (m MockDepHandler) MainFilePath() string {
-	return m.mainFilePath
-}
-
 // TestThisFileIsMineWithEmptyFile tests handling of empty Go files
 func TestThisFileIsMineWithEmptyFile(t *testing.T) {
 	// Create temporary directory
@@ -43,14 +34,11 @@ func main() {
 	// Create GoDepFind instance
 	gdf := New(tempDir)
 
-	// Create mock handler
-	handler := MockDepHandler{
-		mainFilePath: "main.go",
-	}
+	mainFilePath := "main.go"
 
 	// Test with empty file - this should not panic or break
 	// and should handle the empty file gracefully
-	result, err := gdf.ThisFileIsMine(handler, emptyFile, "create")
+	result, err := gdf.ThisFileIsMine(mainFilePath, emptyFile, "create")
 
 	// The function should not return an error due to empty file
 	// but should handle it gracefully
@@ -85,13 +73,10 @@ func main() {
 	// Create GoDepFind instance
 	gdf := New(tempDir)
 
-	// Create mock handler
-	handler := MockDepHandler{
-		mainFilePath: "main.go",
-	}
+	mainFilePath := "main.go"
 
 	// Test with invalid syntax file
-	result, err := gdf.ThisFileIsMine(handler, invalidFile, "create")
+	result, err := gdf.ThisFileIsMine(mainFilePath, invalidFile, "create")
 
 	if err != nil {
 		t.Logf("Error occurred with invalid syntax file: %v", err)
@@ -115,13 +100,10 @@ func TestThisFileIsMineWithPartiallyWritten(t *testing.T) {
 	// Create GoDepFind instance
 	gdf := New(tempDir)
 
-	// Create mock handler
-	handler := MockDepHandler{
-		mainFilePath: "main.go",
-	}
+	mainFilePath := "main.go"
 
 	// Test with partial file
-	result, err := gdf.ThisFileIsMine(handler, partialFile, "write")
+	result, err := gdf.ThisFileIsMine(mainFilePath, partialFile, "write")
 
 	if err != nil {
 		t.Logf("Error occurred with partial file: %v", err)

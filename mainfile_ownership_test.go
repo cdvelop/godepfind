@@ -6,16 +6,14 @@ import (
 	"testing"
 )
 
-// Test that when fileName equals handler.MainFilePath (specific identifier in a main package)
+// Test that when fileName equals mainFilePath (specific identifier in a main package)
 // ThisFileIsMine should return true for the handler that owns that specific main package.
 // This follows the new path-based disambiguation approach per CACHE_REFACTOR_PLAN.md
 func TestMainFileNameEqualsHandlerMainFilePath(t *testing.T) {
 	finder := New("testproject")
 
 	// Use specific handler that targets appAserver package
-	handler := &MockHandler{
-		mainFilePath: "appAserver", // Specific identifier, not generic "main.go"
-	}
+	mainFilePath := "appAserver/main.go" // Specific identifier, not generic "main.go"
 
 	// Use the main.go from testproject/appAserver
 	filePath := filepath.Join("testproject", "appAserver", "main.go")
@@ -26,7 +24,7 @@ func TestMainFileNameEqualsHandlerMainFilePath(t *testing.T) {
 		return
 	}
 
-	isMine, err := finder.ThisFileIsMine(handler, filePath, "write")
+	isMine, err := finder.ThisFileIsMine(mainFilePath, filePath, "write")
 	if err != nil {
 		t.Fatalf("ThisFileIsMine returned unexpected error: %v", err)
 	}
