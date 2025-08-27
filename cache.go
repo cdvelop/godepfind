@@ -11,7 +11,7 @@ func (g *GoDepFind) matchesHandlerFile(mainPkg, handlerFile string) bool {
 	// Extract base name from main package path
 	baseName := filepath.Base(mainPkg)
 
-	// Extract filename from handler file (in case it's a full path)
+	// Extract filename from handler file (in case it's a path)
 	handlerFileName := filepath.Base(handlerFile)
 
 	// Direct match with package base name (for cases like "appAserver")
@@ -36,6 +36,18 @@ func (g *GoDepFind) matchesHandlerFile(mainPkg, handlerFile string) bool {
 	// Check if main package contains handler base (without extension)
 	if handlerBase != "" && handlerBase != "main" && strings.Contains(mainPkg, handlerBase) {
 		return true
+	}
+
+	// If handlerFile contains a path (e.g., "appDserver/main.go"), compare the first path element
+	if strings.Contains(handlerFile, "/") || strings.Contains(handlerFile, "\\") {
+		// Normalize to forward slashes for consistent splitting
+		hf := filepath.ToSlash(handlerFile)
+		parts := strings.Split(hf, "/")
+		if len(parts) > 0 {
+			if parts[0] == baseName {
+				return true
+			}
+		}
 	}
 
 	return false
@@ -98,6 +110,18 @@ func (g *GoDepFind) invalidatePackageCache(fileName string) error {
 				}
 			}
 		}
+	}
+	return nil
+}
+
+// invalidatePackageCacheOnly invalidates only packageCache, preserves dependencyGraph
+func (g *GoDepFind) invalidatePackageCacheOnly(fileName string) error {
+	// Find ALL packages containing this filename
+	packages := g.fileToPackages[fileName]
+
+	for _, pkg := range packages {
+		// Only remove from packageCache, preserve dependencyGraph and reverseDeps
+		delete(g.packageCache, pkg)
 	}
 	return nil
 }
@@ -270,6 +294,70 @@ func (g *GoDepFind) cachedMainImportsPackage(mainPath, targetPkg string) bool {
 	return g.cachedImports(mainPath, targetPkg, visited)
 }
 
+// isSameFile compares two file paths for equality (robust absolute comparison)
+func (g *GoDepFind) isSameFile(filePath1, filePath2 string) bool {
+	abs1, err1 := filepath.Abs(filePath1)
+	abs2, err2 := filepath.Abs(filePath2)
+	if err1 != nil || err2 != nil {
+		return filePath1 == filePath2
+	}
+
+	// If one is relative, try to make it absolute relative to rootDir
+	if !filepath.IsAbs(filePath2) {
+		abs2FromRoot, err := filepath.Abs(filepath.Join(g.rootDir, filePath2))
+		if err == nil {
+			abs2 = abs2FromRoot
+		}
+	}
+	if !filepath.IsAbs(filePath1) {
+		abs1FromRoot, err := filepath.Abs(filepath.Join(g.rootDir, filePath1))
+		if err == nil {
+			abs1 = abs1FromRoot
+		}
+	}
+
+	return abs1 == abs2
+}
+
+// updateCacheForFileWithContext updates cache based on file events and handler context
+func (g *GoDepFind) updateCacheForFileWithContext(fileName, filePath, event, handlerMainFile string) error {
+	// Initialize cache if needed
+	if err := g.ensureCacheInitialized(); err != nil {
+		return err
+	}
+
+	switch event {
+	case "write":
+		// Only rescan fully if the modified file is the handler's mainFilePath
+		if handlerMainFile != "" && g.isSameFile(filePath, handlerMainFile) {
+			return g.rescanMainPackageDependencies(filePath)
+		}
+		// For non-main files, only invalidate package cache (don't touch dependency graph)
+		return g.invalidatePackageCacheOnly(fileName)
+	case "create":
+		return g.handleFileCreate(fileName, filePath)
+	case "remove":
+		return g.handleFileRemove(fileName, filePath)
+	case "rename":
+		if err := g.handleFileRemove(fileName, filePath); err != nil {
+			return err
+		}
+		return g.handleFileCreate(fileName, filePath)
+	}
+
+	return nil
+}
+
+// rescanMainPackageDependencies rescans only the dependencies of the main package
+func (g *GoDepFind) rescanMainPackageDependencies(mainFilePath string) error {
+	// Simpler and robust: rebuild entire cache for module when main changes.
+	// This ensures dependencyGraph, file mappings and mainPackages stay consistent.
+	if err := g.rebuildCache(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // cachedImports returns true if path imports targetPkg transitively using cache
 func (g *GoDepFind) cachedImports(path, targetPkg string, visited map[string]bool) bool {
 	if visited[path] {
@@ -284,6 +372,9 @@ func (g *GoDepFind) cachedImports(path, targetPkg string, visited map[string]boo
 	// Use cached dependency graph
 	if deps, exists := g.dependencyGraph[path]; exists {
 		for _, dep := range deps {
+			if dep == targetPkg {
+				return true
+			}
 			if g.cachedImports(dep, targetPkg, visited) {
 				return true
 			}

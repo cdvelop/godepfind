@@ -207,10 +207,10 @@ This validation ensures **deterministic file ownership** by preventing ambiguity
 
 | Scenario                | Without Cache      | With Cache         | Speedup   |
 |------------------------|--------------------|--------------------|-----------|
-| GoFileComesFromMain    | ~15,300,000 ns/op  | ~210 ns/op         | ~70,000x  |
-| ThisFileIsMine         | ~15,200,000 ns/op  | ~310 ns/op         | ~49,000x  |
-| Real-World Scenario    | ~5,000,000 ns/op   | ~310 ns/op*        | ~16,000x* |
-| Multiple Files         | ~61,200,000 ns/op  | ~890 ns/op         | ~68,000x  |
+| GoFileComesFromMain    | ~14,000,000 ns/op  | ~194 ns/op         | ~72,000x  |
+| ThisFileIsMine         | ~13,000,000 ns/op  | ~22,000 ns/op      | ~590x     |
+| Real-World Scenario    | ~8,500,000 ns/op   | ~310 ns/op*        | ~27,000x* |
+| Multiple Files         | ~55,000,000 ns/op  | ~860 ns/op         | ~64,000x  |
 | Cache Invalidation     | N/A                | ~305 ns/op         | -         |
 
 *See [docs/BENCHMARK.md](docs/BENCHMARK.md) for full results and details.*
@@ -218,7 +218,7 @@ This validation ensures **deterministic file ownership** by preventing ambiguity
 *Note: Real-World Scenario with cache is extremely fast; actual value is similar to other cached operations.*
 
 > **Expert Note:**
-> GoDepFind's cache system achieves real-time performance (from ~15,000,000 ns/op to ~210 ns/op, ~70,000x faster) and reduces memory allocations to nearly zero in repeated queries. This makes it highly suitable for modern development environments, file watchers, and incremental build systems.
+> GoDepFind's cache system achieves real-time performance (from ~14,000,000 ns/op to ~194 ns/op, ~72,000x faster) and reduces memory allocations to nearly zero in repeated queries. This makes it highly suitable for modern development environments, file watchers, and incremental build systems.
 
 - **Lazy Loading**: Cache is built only when needed
 - **Selective Invalidation**: Only affected packages are re-analyzed when files change

@@ -64,8 +64,8 @@ func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, 
 		return false, nil
 	}
 
-	// Update cache based on file changes when queried
-	if err := g.updateCacheForFile(fileName, filePath, event); err != nil {
+	// Update cache based on file changes when queried (pass handler context)
+	if err := g.updateCacheForFileWithContext(fileName, filePath, event, mainFilePath); err != nil {
 		return false, fmt.Errorf("cache update failed: %w", err)
 	}
 
@@ -114,14 +114,27 @@ func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, 
 	var targetPkg string
 	if filePath != "" {
 		// Use exact path resolution when available (priority)
-		if absPath, err := filepath.Abs(filePath); err == nil {
-			// Convert to relative path for cache lookup
-			relPath, err := filepath.Rel(g.rootDir, absPath)
-			if err != nil {
-				relPath = filePath // fallback to original
-			}
-			if pkg, exists := g.filePathToPackage[relPath]; exists {
+		var resolvedPath string
+		if filepath.IsAbs(filePath) {
+			resolvedPath = filePath
+		} else {
+			// For relative paths, resolve from rootDir
+			resolvedPath = filepath.Join(g.rootDir, filePath)
+		}
+
+		if absPath, err := filepath.Abs(resolvedPath); err == nil {
+			// Try absolute path lookup first (rebuildCache stores absolute paths)
+			if pkg, exists := g.filePathToPackage[absPath]; exists {
 				targetPkg = pkg
+			} else {
+				// Convert to relative path for cache lookup as fallback
+				relPath, err := filepath.Rel(g.rootDir, absPath)
+				if err != nil {
+					relPath = filePath // fallback to original
+				}
+				if pkg, exists := g.filePathToPackage[relPath]; exists {
+					targetPkg = pkg
+				}
 			}
 		}
 	}

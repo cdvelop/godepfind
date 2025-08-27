@@ -1,6 +1,6 @@
 # GoDepFind Cache Performance Benchmarks
 
-_Last updated: 2025-08-05_
+_Last updated: 2025-08-27_
 
 ---
 
@@ -15,22 +15,22 @@ goos: linux
 goarch: amd64
 pkg: github.com/cdvelop/godepfind
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkGoFileComesFromMainWithoutCache-16          74   15335815 ns/op   104763 B/op     944 allocs/op
-BenchmarkGoFileComesFromMainWithoutCache-16          80   15475456 ns/op   104828 B/op     944 allocs/op
-BenchmarkGoFileComesFromMainWithoutCache-16          81   15035262 ns/op   104930 B/op     944 allocs/op
+BenchmarkGoFileComesFromMainWithoutCache-16           72          15888369 ns/op      105868 B/op         961 allocs/op
+BenchmarkGoFileComesFromMainWithoutCache-16           75          13560859 ns/op      105521 B/op         961 allocs/op
+BenchmarkGoFileComesFromMainWithoutCache-16           87          14543850 ns/op      105799 B/op         961 allocs/op
 PASS
-ok      github.com/cdvelop/godepfind  4.872s
+ok      github.com/cdvelop/godepfind    6.270s
 
 ⚡ With Cache (reuses dependency graph):
 goos: linux
 goarch: amd64
 pkg: github.com/cdvelop/godepfind
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkGoFileComesFromMainWithCache-16      5429742      212.0 ns/op      48 B/op        2 allocs/op
-BenchmarkGoFileComesFromMainWithCache-16      5596209      212.5 ns/op      48 B/op        2 allocs/op
-BenchmarkGoFileComesFromMainWithCache-16      5564578      208.8 ns/op      48 B/op        2 allocs/op
+BenchmarkGoFileComesFromMainWithCache-16         6301887               197.3 ns/op        48 B/op           2 allocs/op
+BenchmarkGoFileComesFromMainWithCache-16         6200535               195.3 ns/op        48 B/op           2 allocs/op
+BenchmarkGoFileComesFromMainWithCache-16         6132447               189.6 ns/op        48 B/op           2 allocs/op
 PASS
-ok      github.com/cdvelop/godepfind  5.631s
+ok      github.com/cdvelop/godepfind    5.958s
 
 ==========================================
 🎯 ThisFileIsMine Performance
@@ -41,22 +41,22 @@ goos: linux
 goarch: amd64
 pkg: github.com/cdvelop/godepfind
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkThisFileIsMineWithoutCache-16         76   15317141 ns/op   104790 B/op     942 allocs/op
-BenchmarkThisFileIsMineWithoutCache-16         78   15289091 ns/op   104692 B/op     942 allocs/op
-BenchmarkThisFileIsMineWithoutCache-16         78   15101860 ns/op   104790 B/op     942 allocs/op
+BenchmarkThisFileIsMineWithoutCache-16                75          13606248 ns/op      114164 B/op        1060 allocs/op
+BenchmarkThisFileIsMineWithoutCache-16                81          13313907 ns/op      113914 B/op        1060 allocs/op
+BenchmarkThisFileIsMineWithoutCache-16                84          12939774 ns/op      113608 B/op        1060 allocs/op
 PASS
-ok      github.com/cdvelop/godepfind  4.796s
+ok      github.com/cdvelop/godepfind    4.841s
 
 ⚡ ThisFileIsMine With Cache:
 goos: linux
 goarch: amd64
 pkg: github.com/cdvelop/godepfind
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkThisFileIsMineWithCache-16      3846771      311.3 ns/op       0 B/op        0 allocs/op
-BenchmarkThisFileIsMineWithCache-16      3858279      304.9 ns/op       0 B/op        0 allocs/op
-BenchmarkThisFileIsMineWithCache-16      3823710      328.6 ns/op       0 B/op        0 allocs/op
+BenchmarkThisFileIsMineWithCache-16        59235             22246 ns/op            8168 B/op             101 allocs/op
+BenchmarkThisFileIsMineWithCache-16        53481             21336 ns/op            8168 B/op             101 allocs/op
+BenchmarkThisFileIsMineWithCache-16        52741             22481 ns/op            8168 B/op             101 allocs/op
 PASS
-ok      github.com/cdvelop/godepfind  6.071s
+ok      github.com/cdvelop/godepfind    5.962s
 
 ==========================================
 🏗️  Cache Initialization Cost
@@ -65,11 +65,11 @@ goos: linux
 goarch: amd64
 pkg: github.com/cdvelop/godepfind
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkCacheInitialization-16         76   15496954 ns/op   105129 B/op     942 allocs/op
-BenchmarkCacheInitialization-16         73   15299626 ns/op   104854 B/op     942 allocs/op
-BenchmarkCacheInitialization-16         74   15267709 ns/op   104833 B/op     942 allocs/op
+BenchmarkCacheInitialization-16               82          13629082 ns/op          105732 B/op             959 allocs/op
+BenchmarkCacheInitialization-16               79          13244336 ns/op          105590 B/op             959 allocs/op
+BenchmarkCacheInitialization-16               90          12917598 ns/op          105587 B/op             959 allocs/op
 PASS
-ok      github.com/cdvelop/godepfind  4.704s
+ok      github.com/cdvelop/godepfind    4.870s
 
 ==========================================
 🌍 Real-World Development Scenario
@@ -79,11 +79,11 @@ goos: linux
 goarch: amd64
 pkg: github.com/cdvelop/godepfind
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkRealWorldScenario-16           234   5293460 ns/op    34350 B/op     308 allocs/op
-BenchmarkRealWorldScenario-16           241   4976328 ns/op    34299 B/op     307 allocs/op
-BenchmarkRealWorldScenario-16           240   5023229 ns/op    34341 B/op     308 allocs/op
+BenchmarkRealWorldScenario-16                129           8851755 ns/op           79301 B/op             738 allocs/op
+BenchmarkRealWorldScenario-16                139           8565794 ns/op           78817 B/op             733 allocs/op
+BenchmarkRealWorldScenario-16                140           8576202 ns/op           79099 B/op             735 allocs/op
 PASS
-ok      github.com/cdvelop/godepfind  6.504s
+ok      github.com/cdvelop/godepfind    7.767s
 
 ==========================================
 ♻️  Cache Invalidation Performance
@@ -93,11 +93,11 @@ goos: linux
 goarch: amd64
 pkg: github.com/cdvelop/godepfind
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkCacheInvalidation-16      3941340      309.0 ns/op       0 B/op        0 allocs/op
-BenchmarkCacheInvalidation-16      3970638      306.4 ns/op       0 B/op        0 allocs/op
-BenchmarkCacheInvalidation-16      3809079      304.0 ns/op       0 B/op        0 allocs/op
+BenchmarkCacheInvalidation-16            3818839               302.4 ns/op             0 B/op               0 allocs/op
+BenchmarkCacheInvalidation-16            3775492               305.3 ns/op             0 B/op               0 allocs/op
+BenchmarkCacheInvalidation-16            3800167               317.8 ns/op             0 B/op               0 allocs/op
 PASS
-ok      github.com/cdvelop/godepfind  5.972s
+ok      github.com/cdvelop/godepfind    6.159s
 
 ==========================================
 📊 Multiple Files Comparison
@@ -108,18 +108,18 @@ goos: linux
 goarch: amd64
 pkg: github.com/cdvelop/godepfind
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkMultipleFilesWithoutCache-16         19   61208435 ns/op   418543 B/op    3773 allocs/op
+BenchmarkMultipleFilesWithoutCache-16                 20          54963533 ns/op      422111 B/op        3841 allocs/op
 PASS
-ok      github.com/cdvelop/godepfind  1.629s
+ok      github.com/cdvelop/godepfind    1.635s
 
 ⚡ Multiple Files With Cache:
 goos: linux
 goarch: amd64
 pkg: github.com/cdvelop/godepfind
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkMultipleFilesWithCache-16      1300862      891.2 ns/op      80 B/op        4 allocs/op
+BenchmarkMultipleFilesWithCache-16       1394188               859.9 ns/op            80 B/op               4 allocs/op
 PASS
-ok      github.com/cdvelop/godepfind  2.585s
+ok      github.com/cdvelop/godepfind    2.635s
 
 ==========================================
 ✅ Benchmark Complete!
