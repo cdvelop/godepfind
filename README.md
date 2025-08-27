@@ -63,23 +63,14 @@ fmt.Printf("Main packages affected by database.go changes: %v\n", mains)
 // Output: [myproject/cmd/server myproject/cmd/cli]
 ```
 
-### Handler-Based File Ownership (NEW)
+### File Ownership (NEW)
 
 **For development tools**: Determine which handler should process a file change.
 
 ```go
-// Define a handler that manages a specific main file
-type MyHandler struct {
-    mainFilePath string
-}
-
-func (h *MyHandler) MainFilePath() string {
-    return h.mainFilePath // e.g. "main.server.go" or "server"
-}
-
 // Check if a file change belongs to this handler
-handler := &MyHandler{mainFilePath: "main.server.go"}
-isMine, err := finder.ThisFileIsMine(handler, "./internal/db/database.go", "write")
+mainFilePath := "app/server/main.go"
+isMine, err := finder.ThisFileIsMine(mainFilePath, "./internal/db/database.go", "write")
 if err != nil {
     log.Fatal(err)
 }
@@ -135,17 +126,9 @@ fmt.Printf("Need to rebuild: %v\n", affected)
 // Note: cmd/cli is NOT affected because it doesn't import the database package
 
 // NEW: Handler-based approach for development tools
-type ServerHandler struct {
-    mainFilePath string
-}
-
-func (h *ServerHandler) MainFilePath() string {
-    return h.mainFilePath // e.g. "main.server.go" or "web/server.go"
-}
-
 // Check if server handler should process this change
-serverHandler := &ServerHandler{mainFilePath: "main.server.go"}
-shouldProcess, err := finder.ThisFileIsMine(serverHandler, "./internal/database/db.go", "write")
+mainFilePath := "cmd/server/main.go"
+shouldProcess, err := finder.ThisFileIsMine(mainFilePath, "./internal/database/db.go", "write")
 if err != nil {
     log.Fatal(err)
 }
@@ -182,24 +165,14 @@ Find packages in sourcePath that import any of the targetPaths.
 
 ### New Cache-Enabled Functions
 
-### `ThisFileIsMine(dh DepHandler, filePath, event string) (bool, error)`
+### `ThisFileIsMine(mainFilePath, filePath, event string) (bool, error)`
 **NEW**: Determine if a file change belongs to a specific handler using intelligent dependency analysis.
-- `dh`: Handler implementing the DepHandler interface
+- `mainFilePath`: Path to the main file that this handler is responsible for managing.
 - `filePath`: **Full path** to the changed file (e.g., "./internal/db/database.go") - **filePath must include directory separators**
 - `event`: Type of change ("write", "create", "remove", "rename")
 - Returns: (true if handler should process, error if any)
 
 **Important**: `filePath` must be a complete path with directory separators (e.g., `"./internal/db/database.go"`). Simple filenames like `"database.go"` are not allowed and will return an error.
-
-### DepHandler Interface
-
-```go
-type DepHandler interface {
-    MainFilePath() string      // Main file this handler manages (e.g. "main.server.go", "web/server.go")
-}
-```
-
-Implement this interface in your handlers to use the smart file ownership detection. The `MainFilePath()` method should return the path to the main file that this handler is responsible for managing.
 
 ## API Requirements & Validation
 
@@ -227,29 +200,26 @@ This validation ensures **deterministic file ownership** by preventing ambiguity
 
 ## Recent Changes
 
-### v2.0 API Simplification
+### v3.0 API Simplification
 
-The `ThisFileIsMine` method has been restructured for better clarity and to eliminate ambiguity:
+The `ThisFileIsMine` method has been restructured for better clarity and to eliminate ambiguity by removing the `DepHandler` interface.
 
 #### Changes Made:
-- **Removed `fileName` parameter**: Now derives filename automatically from `filePath`
-- **Simplified `DepHandler` interface**: Removed unnecessary `Name()` method
-- **Added strict path validation**: Requires full paths with directory separators
-- **Eliminated redundancy**: Single source of truth for file identification
+- **Removed `DepHandler` interface**: The `mainFilePath` is now passed directly to `ThisFileIsMine`.
+- **Simplified `ThisFileIsMine` signature**: The signature is now `ThisFileIsMine(mainFilePath, filePath, event string)`.
 
 #### Migration Guide:
 ```go
 // OLD API (deprecated)
-isMine, err := finder.ThisFileIsMine(handler, "database.go", "./internal/db/database.go", "write")
+isMine, err := finder.ThisFileIsMine(handler, "./internal/db/database.go", "write")
 
 // NEW API (current)
-isMine, err := finder.ThisFileIsMine(handler, "./internal/db/database.go", "write")
+isMine, err := finder.ThisFileIsMine("app/server/main.go", "./internal/db/database.go", "write")
 ```
 
 #### Breaking Changes:
-- `DepHandler.Name()` method removed - implement only `MainFilePath()`
-- `ThisFileIsMine` signature changed - removed `fileName` parameter
-- Strict validation now enforced on `filePath` parameter
+- `DepHandler` interface removed.
+- `ThisFileIsMine` signature changed to accept `mainFilePath` as a string.
 
 ## Performance & Caching
 

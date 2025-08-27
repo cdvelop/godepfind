@@ -12,24 +12,23 @@ import (
 func TestMainFileDifferentiationAcrossApps(t *testing.T) {
 	finder := New("testproject")
 
-	// Define handlers that identify their main by package/app name
-	serverHandler := &MockHandler{mainFilePath: "appAserver"}
-	cmdHandler := &MockHandler{mainFilePath: "appBcmd"}
-	wasmHandler := &MockHandler{mainFilePath: "appCwasm"}
+	serverMain := "appAserver/main.go"
+	cmdMain := "appBcmd/main.go"
+	wasmMain := "appCwasm/main.go"
 
 	tests := []struct {
-		name        string
-		handler     DepHandler
-		fileName    string
-		filePath    string
-		expectOwner bool
+		name         string
+		mainFilePath string
+		fileName     string
+		filePath     string
+		expectOwner  bool
 	}{
-		{"appA main owned by serverHandler", serverHandler, "main.go", filepath.Join("testproject", "appAserver", "main.go"), true},
-		{"appA main not owned by cmdHandler", cmdHandler, "main.go", filepath.Join("testproject", "appAserver", "main.go"), false},
-		{"appB main owned by cmdHandler", cmdHandler, "main.go", filepath.Join("testproject", "appBcmd", "main.go"), true},
-		{"appB main not owned by wasmHandler", wasmHandler, "main.go", filepath.Join("testproject", "appBcmd", "main.go"), false},
-		{"appC main owned by wasmHandler", wasmHandler, "main.go", filepath.Join("testproject", "appCwasm", "main.go"), true},
-		{"module1 not owned by wasmHandler", wasmHandler, "module1.go", filepath.Join("testproject", "modules", "module1", "module1.go"), false},
+		{"appA main owned by serverHandler", serverMain, "main.go", filepath.Join("testproject", "appAserver", "main.go"), true},
+		{"appA main not owned by cmdHandler", cmdMain, "main.go", filepath.Join("testproject", "appAserver", "main.go"), false},
+		{"appB main owned by cmdHandler", cmdMain, "main.go", filepath.Join("testproject", "appBcmd", "main.go"), true},
+		{"appB main not owned by wasmHandler", wasmMain, "main.go", filepath.Join("testproject", "appBcmd", "main.go"), false},
+		{"appC main owned by wasmHandler", wasmMain, "main.go", filepath.Join("testproject", "appCwasm", "main.go"), true},
+		{"module1 not owned by wasmHandler", wasmMain, "module1.go", filepath.Join("testproject", "modules", "module1", "module1.go"), false},
 	}
 
 	for _, tt := range tests {
@@ -48,7 +47,7 @@ func TestMainFileDifferentiationAcrossApps(t *testing.T) {
 			mainsForFile, _ := finder.GoFileComesFromMain(tt.fileName)
 			t.Logf("Diagnostics: resolvedPkg=%q, fileToPackages[\"%s\"]=%v, mainPackages=%v, mainsForFile=%v", resolvedPkg, tt.fileName, finder.fileToPackages[tt.fileName], finder.mainPackages, mainsForFile)
 
-			isMine, err := finder.ThisFileIsMine(tt.handler, tt.filePath, "write")
+			isMine, err := finder.ThisFileIsMine(tt.mainFilePath, tt.filePath, "write")
 			if err != nil {
 				t.Fatalf("ThisFileIsMine returned unexpected error: %v", err)
 			}
@@ -57,7 +56,7 @@ func TestMainFileDifferentiationAcrossApps(t *testing.T) {
 				pkg, _ := finder.findPackageContainingFileByPath(tt.filePath)
 				var matched []string
 				for _, mp := range finder.mainPackages {
-					if finder.cachedMainImportsPackage(mp, pkg) && finder.matchesHandlerFile(mp, tt.handler.MainFilePath()) {
+					if finder.cachedMainImportsPackage(mp, pkg) && finder.matchesHandlerFile(mp, tt.mainFilePath) {
 						matched = append(matched, mp)
 					}
 				}

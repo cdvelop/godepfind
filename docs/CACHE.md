@@ -32,34 +32,15 @@ type GoDepFind struct {
 }
 ```
 
-### 3. Handler Interface (Simplified)
+### 3. File Ownership Method
 ```go
-type DepHandler interface {
-    Name() string                           // handler name: wasmH, serverHttp, cliApp
-    UnobservedFiles() []string             // main handler files: main.go, main.wasm.go
-}
+func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error)
 ```
+- The `mainFilePath` is passed directly.
+- Simplifies API by eliminating the `DepHandler` interface.
+- Returns error for robust error handling.
 
-**Important**: `UnobservedFiles()` returns the **main files that this handler manages**. GoDepFind uses this to determine file ownership by comparing if a changed file matches any handler's main files.
-
-### 4. Cache Invalidation Strategy
-
-#### File Events Handling:
-- **`write`**: Invalidate only the package containing the file
-- **`create`**: Re-scan dependencies of the parent package + update fileToPackage mapping
-- **`remove`**: Invalidate dependencies pointing to that file + remove from fileToPackage
-- **`rename`**: Treat as remove + create sequence
-
-#### File Ownership Method (No Registration Required):
-```go
-func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error)
-```
-- **No handler registration needed** - handler passes itself directly
-- Simplifies API by eliminating registration complexity
-- Direct access to handler's UnobservedFiles() method
-- Returns error for robust error handling
-
-### 5. Lazy Loading Implementation
+### 4. Lazy Loading Implementation
 ```go
 func (g *GoDepFind) ensureCacheInitialized() error {
     if !g.CachedModule {
@@ -69,18 +50,18 @@ func (g *GoDepFind) ensureCacheInitialized() error {
 }
 ```
 
-### 6. Integration with Watcher System
+### 5. Integration with Watcher System
 
 **Cache Management in ThisFileIsMine**: Cache updates happen only when handlers query file ownership
 ```go
-func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error) {
+func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error) {
     // Update cache based on file changes when queried
-    if err := g.updateCacheForFile(fileName, filePath, event); err != nil {
+    if err := g.updateCacheForFile(filepath.Base(filePath), filePath, event); err != nil {
         return false, err
     }
     
     // Then check ownership
-    return g.checkFileOwnership(dh, fileName)
+    // ...
 }
 ```
 
@@ -100,30 +81,26 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event stri
 
 ### File Ownership Logic with Cache Management
 ```go
-func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error) {
-    if dh == nil {
-        return false, fmt.Errorf("handler cannot be nil")
+func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error) {
+    if mainFilePath == "" {
+        return false, fmt.Errorf("mainFilePath cannot be empty")
     }
     
     // Update cache based on file changes when queried
-    if err := g.updateCacheForFile(fileName, filePath, event); err != nil {
+    if err := g.updateCacheForFile(filepath.Base(filePath), filePath, event); err != nil {
         return false, fmt.Errorf("cache update failed: %w", err)
     }
     
     // Use optimized GoFileComesFromMain to find which main packages depend on this file
-    mainPackages, err := g.GoFileComesFromMain(fileName)
+    mainPackages, err := g.GoFileComesFromMain(filepath.Base(filePath))
     if err != nil {
         return false, fmt.Errorf("dependency analysis failed: %w", err)
     }
     
-    // Check if any main package matches handler's managed files
-    handlerFiles := dh.UnobservedFiles()
+    // Check if any main package matches the handler's main file path
     for _, mainPkg := range mainPackages {
-        for _, handlerFile := range handlerFiles {
-            // Compare main package with handler's managed files
-            if filepath.Base(mainPkg) == handlerFile || strings.Contains(mainPkg, handlerFile) {
-                return true, nil
-            }
+        if filepath.Base(mainPkg) == mainFilePath || strings.Contains(mainPkg, mainFilePath) {
+            return true, nil
         }
     }
     
@@ -144,7 +121,7 @@ func (w *TinyWasm) NewFileEvent(fileName, extension, filePath, event string) err
     }
     
     // Cache is updated internally when ThisFileIsMine is called
-    isMine, err := w.goDepFind.ThisFileIsMine(w, fileName, filePath, event)
+    isMine, err := w.goDepFind.ThisFileIsMine(w.mainFilePath, filePath, event)
     if err != nil {
         return fmt.Errorf("%s: %w", e, err)
     }
@@ -156,48 +133,6 @@ func (w *TinyWasm) NewFileEvent(fileName, extension, filePath, event string) err
     return w.processFileChange(fileName, filePath, event)
 }
 ```
-
-## Pending Questions/Clarifications
-
-### 1. **File Matching Strategy - RESOLVED**
-The file matching strategy will use the optimized `GoFileComesFromMain` method:
-
-**Strategy**: 
-1. Use `GoFileComesFromMain(fileName)` to get which main packages depend on the changed file
-2. Compare the result with the handler's `UnobservedFiles()` to determine ownership
-3. If any main package from the result matches any file in `UnobservedFiles()`, the handler owns this file
-
-**Example Logic**:
-```go
-func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error) {
-    // Update cache and get which main packages depend on this file
-    mainPackages, err := g.GoFileComesFromMain(fileName)
-    if err != nil {
-        return false, err
-    }
-    
-    // Check if any main package matches handler's managed files
-    handlerFiles := dh.UnobservedFiles()
-    for _, mainPkg := range mainPackages {
-        for _, handlerFile := range handlerFiles {
-            if filepath.Base(mainPkg) == handlerFile || strings.Contains(mainPkg, handlerFile) {
-                return true, nil
-            }
-        }
-    }
-    
-    return false, nil
-}
-```
-
-This approach is much more intelligent than simple filename comparison because it uses actual dependency analysis.
-
-### 2. **Integration Approach - CONFIRMED**
-This approach is confirmed:
-- **GoDepFind NO FileEvent**: GoDepFind doesn't implement FileEvent interface
-- **Cache updates in ThisFileIsMine**: Cache management only when handlers query
-- **Intelligent file ownership**: Uses `GoFileComesFromMain` for dependency-based matching
-- **No registration required**: Handlers pass themselves directly
 
 ## Cache Optimization Strategy
 
@@ -212,27 +147,25 @@ This makes `ThisFileIsMine` both intelligent and performant.
 ## Implementation Phases
 
 1. **Phase 1**: Basic cache structure and lazy loading
-2. **Phase 2**: Handler interface definition
-3. **Phase 3**: `ThisFileIsMine` method implementation (no registration)
-4. **Phase 4**: File event handling and cache invalidation
-5. **Phase 5**: Integration testing with godev watcher
+2. **Phase 2**: `ThisFileIsMine` method implementation
+3. **Phase 3**: File event handling and cache invalidation
+4. **Phase 4**: Integration testing with godev watcher
 
 ## Real-World Usage Example
 
 ```go
 // No FileEvent implementation in GoDepFind
 
-// Handler implements DepHandler and uses ThisFileIsMine
-func (w *TinyWasm) NewFileEvent(fileName, extension, filePath, event string) error {
-    const e = "NewFileEvent Wasm"
+// Example of how a handler would use ThisFileIsMine
+func (w *SomeHandler) NewFileEvent(fileName, extension, filePath, event string) error {
+    const e = "NewFileEvent"
     
     if filePath == "" {
         return errors.New(e + "filePath is empty")
     }
     
-    // No registration needed - pass self directly
     // Cache is updated internally within ThisFileIsMine
-    isMine, err := w.goDepFind.ThisFileIsMine(w, fileName, filePath, event)
+    isMine, err := w.goDepFind.ThisFileIsMine(w.mainFilePath, filePath, event)
     if err != nil {
         return fmt.Errorf("%s: %w", e, err)
     }
@@ -242,22 +175,11 @@ func (w *TinyWasm) NewFileEvent(fileName, extension, filePath, event string) err
     
     return w.processFileChange(fileName, filePath, event)
 }
-
-// Handler implements DepHandler interface
-func (w *TinyWasm) Name() string {
-    return "wasmH"
-}
-
-func (w *TinyWasm) UnobservedFiles() []string {
-    return []string{"main.wasm.go", "f.main.go"}
-}
 ```
 
 **Benefits of This Approach**:
-- ✅ **No registration complexity** - handlers pass themselves
+- ✅ **No registration complexity**
 - ✅ **Simplified API** - eliminates handler management
-- ✅ **Direct access** to handler methods
-- ✅ **Type safety** - interface ensures proper implementation
 - ✅ **Clean separation** - cache maintenance vs. handler logic
 
 Please confirm if this approach addresses all requirements before proceeding with implementation.
