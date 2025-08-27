@@ -14,7 +14,6 @@ func TestMainFileNameEqualsHandlerMainFilePath(t *testing.T) {
 
 	// Use specific handler that targets appAserver package
 	handler := &MockHandler{
-		name:         "serverHandler",
 		mainFilePath: "appAserver", // Specific identifier, not generic "main.go"
 	}
 
@@ -27,7 +26,7 @@ func TestMainFileNameEqualsHandlerMainFilePath(t *testing.T) {
 		return
 	}
 
-	isMine, err := finder.ThisFileIsMine(handler, "main.go", filePath, "write")
+	isMine, err := finder.ThisFileIsMine(handler, filePath, "write")
 	if err != nil {
 		t.Fatalf("ThisFileIsMine returned unexpected error: %v", err)
 	}

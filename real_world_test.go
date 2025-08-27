@@ -12,12 +12,10 @@ func TestThisFileIsMineRealWorldScenario(t *testing.T) {
 
 	// Create handlers that mimic the real ones from your logs
 	goServerHandler := MockDepHandler{
-		name:         "GoServer",
 		mainFilePath: "appAserver/main.go", // Simulates pwa/main.server.go
 	}
 
 	tinyWasmHandler := MockDepHandler{
-		name:         "TinyWasm",
 		mainFilePath: "appCwasm/main.go", // Simulates pwa/public/main.wasm
 	}
 
@@ -53,11 +51,11 @@ func TestThisFileIsMineRealWorldScenario(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Logf("Handler: %s, MainFilePath(): %s", tt.handler.Name(), tt.handler.MainFilePath())
+			t.Logf("Handler: %s, MainFilePath(): %s", "MockHandler", tt.handler.MainFilePath())
 			t.Logf("File: %s, FilePath: %s", tt.fileName, tt.filePath)
 
 			// Test the actual method that's failing
-			isMine, err := finder.ThisFileIsMine(tt.handler, tt.fileName, tt.filePath, "write")
+			isMine, err := finder.ThisFileIsMine(tt.handler, tt.filePath, "write")
 
 			if err != nil {
 				t.Logf("ThisFileIsMine error: %v", err)
@@ -80,12 +78,10 @@ func TestRealWorldGoDevLogs(t *testing.T) {
 
 	// Real handlers from logs - exact values
 	goServerHandler := MockDepHandler{
-		name:         "GoServer",
 		mainFilePath: "pwa/main.server.go", // Exact from logs
 	}
 
 	tinyWasmHandler := MockDepHandler{
-		name:         "TinyWasm",
 		mainFilePath: "pwa/main.wasm.go", // Corrected: should be the Go source file, not the compiled .wasm
 	}
 
@@ -95,9 +91,9 @@ func TestRealWorldGoDevLogs(t *testing.T) {
 	filePath := "testproject/pwa/main.server.go"
 
 	t.Logf("=== Testing GoServer ===")
-	t.Logf("Name(): %s MainFilePath(): %s File: %s", goServerHandler.Name(), goServerHandler.MainFilePath(), fileName)
+	t.Logf("Name(): %s MainFilePath(): %s File: %s", "MockHandler", goServerHandler.MainFilePath(), fileName)
 
-	isMine, err := finder.ThisFileIsMine(goServerHandler, fileName, filePath, "write")
+	isMine, err := finder.ThisFileIsMine(goServerHandler, filePath, "write")
 	if err != nil {
 		t.Logf("Error: %v - Skipping due to cache issues", err)
 		t.Skip("Skipping due to cache initialization issues")
@@ -110,9 +106,9 @@ func TestRealWorldGoDevLogs(t *testing.T) {
 	}
 
 	t.Logf("=== Testing TinyWasm ===")
-	t.Logf("Name(): %s MainFilePath(): %s File: %s", tinyWasmHandler.Name(), tinyWasmHandler.MainFilePath(), fileName)
+	t.Logf("Name(): %s MainFilePath(): %s File: %s", "MockHandler", tinyWasmHandler.MainFilePath(), fileName)
 
-	isMine, err = finder.ThisFileIsMine(tinyWasmHandler, fileName, filePath, "write")
+	isMine, err = finder.ThisFileIsMine(tinyWasmHandler, filePath, "write")
 	if err != nil {
 		t.Logf("Error: %v - Skipping due to cache issues", err)
 		return
@@ -127,9 +123,9 @@ func TestRealWorldGoDevLogs(t *testing.T) {
 	t.Logf("=== Testing TinyWasm with its own file ===")
 	wasmFileName := "main.wasm.go"
 	wasmFilePath := "testproject/pwa/main.wasm.go"
-	t.Logf("Name(): %s MainFilePath(): %s File: %s", tinyWasmHandler.Name(), tinyWasmHandler.MainFilePath(), wasmFileName)
+	t.Logf("Name(): %s MainFilePath(): %s File: %s", "MockHandler", tinyWasmHandler.MainFilePath(), wasmFileName)
 
-	isMine, err = finder.ThisFileIsMine(tinyWasmHandler, wasmFileName, wasmFilePath, "write")
+	isMine, err = finder.ThisFileIsMine(tinyWasmHandler, wasmFilePath, "write")
 	if err != nil {
 		t.Logf("Error: %v - Skipping due to cache issues", err)
 		return

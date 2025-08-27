@@ -40,7 +40,7 @@ func (g *GoDepFind) CheckFileOwnership(dh DepHandler, fileName, filePath string)
 	}
 
 	// Check ownership using existing logic
-	belongs, err := g.ThisFileIsMine(dh, fileName, filePath, "check")
+	belongs, err := g.ThisFileIsMine(dh, filePath, "check")
 	if err != nil {
 		return "", err
 	}
@@ -73,7 +73,7 @@ func (g *GoDepFind) AnalyzeFileImpact(dh DepHandler, fileName, filePath, event s
 		return nil, err
 	}
 
-	belongs, err := g.ThisFileIsMine(dh, fileName, filePath, event)
+	belongs, err := g.ThisFileIsMine(dh, filePath, event)
 	if err != nil {
 		return nil, err
 	}

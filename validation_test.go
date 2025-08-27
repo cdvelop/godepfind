@@ -18,9 +18,7 @@ func TestValidateInputForProcessing(t *testing.T) {
 		errorContains   string
 	}{
 		{
-			name: "valid input with valid go file",
 			handler: MockDepHandler{
-				name:         "testHandler",
 				mainFilePath: "main.go",
 			},
 			fileName:        "test.go",
@@ -29,7 +27,6 @@ func TestValidateInputForProcessing(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name:            "nil handler",
 			handler:         nil,
 			fileName:        "test.go",
 			fileContent:     "package main",
@@ -38,9 +35,7 @@ func TestValidateInputForProcessing(t *testing.T) {
 			errorContains:   "handler cannot be nil",
 		},
 		{
-			name: "handler with empty main file path",
 			handler: MockDepHandler{
-				name:         "testHandler",
 				mainFilePath: "",
 			},
 			fileName:        "test.go",
@@ -50,9 +45,7 @@ func TestValidateInputForProcessing(t *testing.T) {
 			errorContains:   "handler main file path cannot be empty",
 		},
 		{
-			name: "empty go file",
 			handler: MockDepHandler{
-				name:         "testHandler",
 				mainFilePath: "main.go",
 			},
 			fileName:        "empty.go",
@@ -61,9 +54,7 @@ func TestValidateInputForProcessing(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name: "invalid go file syntax",
 			handler: MockDepHandler{
-				name:         "testHandler",
 				mainFilePath: "main.go",
 			},
 			fileName:        "invalid.go",
@@ -72,9 +63,7 @@ func TestValidateInputForProcessing(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name: "file being written",
 			handler: MockDepHandler{
-				name:         "testHandler",
 				mainFilePath: "main.go",
 			},
 			fileName:        "partial.go",
@@ -83,9 +72,7 @@ func TestValidateInputForProcessing(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name: "non-go file",
 			handler: MockDepHandler{
-				name:         "testHandler",
 				mainFilePath: "main.go",
 			},
 			fileName:        "test.txt",
@@ -94,9 +81,7 @@ func TestValidateInputForProcessing(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name: "go file with only comments",
 			handler: MockDepHandler{
-				name:         "testHandler",
 				mainFilePath: "main.go",
 			},
 			fileName:        "comments.go",
@@ -172,12 +157,11 @@ func main() {
 
 	gdf := New(tempDir)
 	handler := MockDepHandler{
-		name:         "testHandler",
 		mainFilePath: "main.go",
 	}
 
 	// Test with empty file - should return false without error
-	result, err := gdf.ThisFileIsMine(handler, "empty.go", emptyFile, "create")
+	result, err := gdf.ThisFileIsMine(handler, emptyFile, "create")
 	if err != nil {
 		t.Errorf("Unexpected error with empty file: %v", err)
 	}
@@ -186,7 +170,7 @@ func main() {
 	}
 
 	// Test with valid file - should process normally
-	result, err = gdf.ThisFileIsMine(handler, "main.go", mainFile, "create")
+	result, err = gdf.ThisFileIsMine(handler, mainFile, "create")
 	if err != nil {
 		t.Logf("Error with valid file (expected in test environment): %v", err)
 	}

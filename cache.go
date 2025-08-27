@@ -104,25 +104,24 @@ func (g *GoDepFind) invalidatePackageCache(fileName string) error {
 
 // handleFileCreate handles file creation events
 func (g *GoDepFind) handleFileCreate(fileName, filePath string) error {
-	if filePath != "" {
-		pkg, err := g.findPackageContainingFileByPath(filePath)
-		if err != nil {
-			return err
+	// filePath is now always required and contains full path
+	pkg, err := g.findPackageContainingFileByPath(filePath)
+	if err != nil {
+		return err
+	}
+
+	if pkg != "" {
+		// Update path mapping
+		if absPath, err := filepath.Abs(filePath); err == nil {
+			g.filePathToPackage[absPath] = pkg
 		}
 
-		if pkg != "" {
-			// Update path mapping
-			if absPath, err := filepath.Abs(filePath); err == nil {
-				g.filePathToPackage[absPath] = pkg
-			}
-
-			// Add to filename mapping (don't overwrite, append if not exists)
-			if !contains(g.fileToPackages[fileName], pkg) {
-				g.fileToPackages[fileName] = append(g.fileToPackages[fileName], pkg)
-			}
-
-			return g.invalidatePackageCache(fileName)
+		// Add to filename mapping (don't overwrite, append if not exists)
+		if !contains(g.fileToPackages[fileName], pkg) {
+			g.fileToPackages[fileName] = append(g.fileToPackages[fileName], pkg)
 		}
+
+		return g.invalidatePackageCache(fileName)
 	}
 	return nil
 }

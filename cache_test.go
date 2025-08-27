@@ -7,12 +7,7 @@ import (
 // MockHandler for testing
 
 type MockHandler struct {
-	name         string
 	mainFilePath string
-}
-
-func (m *MockHandler) Name() string {
-	return m.name
 }
 
 func (m *MockHandler) MainFilePath() string {
@@ -23,7 +18,7 @@ func TestThisFileIsMine(t *testing.T) {
 	finder := New("testproject")
 
 	// Test with nil handler - should return error
-	_, err := finder.ThisFileIsMine(nil, "main.go", "testproject/appAserver/main.go", "write")
+	_, err := finder.ThisFileIsMine(nil, "testproject/appAserver/main.go", "write")
 	if err == nil {
 		t.Error("Expected error for nil handler")
 	}
@@ -48,8 +43,8 @@ func TestThisFileIsMine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := &MockHandler{name: tt.handlerName, mainFilePath: tt.mainFilePath}
-			result, err := finder.ThisFileIsMine(handler, tt.fileName, tt.filePath, "write")
+			handler := &MockHandler{mainFilePath: tt.mainFilePath}
+			result, err := finder.ThisFileIsMine(handler, tt.filePath, "write")
 			if err != nil {
 				t.Logf("Test %s: got error (may be expected in test environment): %v", tt.name, err)
 				return // Skip if cache initialization fails

@@ -8,12 +8,7 @@ import (
 
 // MockDepHandler implements DepHandler for testing
 type MockDepHandler struct {
-	name         string
 	mainFilePath string
-}
-
-func (m MockDepHandler) Name() string {
-	return m.name
 }
 
 func (m MockDepHandler) MainFilePath() string {
@@ -50,13 +45,12 @@ func main() {
 
 	// Create mock handler
 	handler := MockDepHandler{
-		name:         "testHandler",
 		mainFilePath: "main.go",
 	}
 
 	// Test with empty file - this should not panic or break
 	// and should handle the empty file gracefully
-	result, err := gdf.ThisFileIsMine(handler, "empty.go", emptyFile, "create")
+	result, err := gdf.ThisFileIsMine(handler, emptyFile, "create")
 
 	// The function should not return an error due to empty file
 	// but should handle it gracefully
@@ -93,12 +87,11 @@ func main() {
 
 	// Create mock handler
 	handler := MockDepHandler{
-		name:         "testHandler",
 		mainFilePath: "main.go",
 	}
 
 	// Test with invalid syntax file
-	result, err := gdf.ThisFileIsMine(handler, "invalid.go", invalidFile, "create")
+	result, err := gdf.ThisFileIsMine(handler, invalidFile, "create")
 
 	if err != nil {
 		t.Logf("Error occurred with invalid syntax file: %v", err)
@@ -124,12 +117,11 @@ func TestThisFileIsMineWithPartiallyWritten(t *testing.T) {
 
 	// Create mock handler
 	handler := MockDepHandler{
-		name:         "testHandler",
 		mainFilePath: "main.go",
 	}
 
 	// Test with partial file
-	result, err := gdf.ThisFileIsMine(handler, "partial.go", partialFile, "write")
+	result, err := gdf.ThisFileIsMine(handler, partialFile, "write")
 
 	if err != nil {
 		t.Logf("Error occurred with partial file: %v", err)

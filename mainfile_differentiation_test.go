@@ -13,9 +13,9 @@ func TestMainFileDifferentiationAcrossApps(t *testing.T) {
 	finder := New("testproject")
 
 	// Define handlers that identify their main by package/app name
-	serverHandler := &MockHandler{name: "serverHandler", mainFilePath: "appAserver"}
-	cmdHandler := &MockHandler{name: "cmdHandler", mainFilePath: "appBcmd"}
-	wasmHandler := &MockHandler{name: "wasmHandler", mainFilePath: "appCwasm"}
+	serverHandler := &MockHandler{mainFilePath: "appAserver"}
+	cmdHandler := &MockHandler{mainFilePath: "appBcmd"}
+	wasmHandler := &MockHandler{mainFilePath: "appCwasm"}
 
 	tests := []struct {
 		name        string
@@ -48,7 +48,7 @@ func TestMainFileDifferentiationAcrossApps(t *testing.T) {
 			mainsForFile, _ := finder.GoFileComesFromMain(tt.fileName)
 			t.Logf("Diagnostics: resolvedPkg=%q, fileToPackages[\"%s\"]=%v, mainPackages=%v, mainsForFile=%v", resolvedPkg, tt.fileName, finder.fileToPackages[tt.fileName], finder.mainPackages, mainsForFile)
 
-			isMine, err := finder.ThisFileIsMine(tt.handler, tt.fileName, tt.filePath, "write")
+			isMine, err := finder.ThisFileIsMine(tt.handler, tt.filePath, "write")
 			if err != nil {
 				t.Fatalf("ThisFileIsMine returned unexpected error: %v", err)
 			}

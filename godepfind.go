@@ -43,12 +43,23 @@ func New(rootDir string) *GoDepFind {
 
 // DepHandler interface for handlers that manage specific main packages
 type DepHandler interface {
-	Name() string         // handler name: wasmH, serverHttp, cliApp
-	MainFilePath() string // package identifier: "appAserver", "appBcmd", "appCwasm", etc.
+	MainFilePath() string // path file ej: app/web/main.go
 }
 
 // ThisFileIsMine determines if a file belongs to a specific handler using path-based resolution
-func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event string) (bool, error) {
+func (g *GoDepFind) ThisFileIsMine(dh DepHandler, filePath, event string) (bool, error) {
+	// Validar que filePath no sea solo un archivo sin ruta
+	if filePath == "" {
+		return false, fmt.Errorf("filePath cannot be empty")
+	}
+
+	if !strings.Contains(filePath, "/") && !strings.Contains(filePath, "\\") {
+		return false, fmt.Errorf("filePath must include directory path, not just filename: %s", filePath)
+	}
+
+	// Derivar fileName del filePath
+	fileName := filepath.Base(filePath)
+
 	// Validate input before processing
 	shouldProcess, err := g.ValidateInputForProcessing(dh, fileName, filePath)
 	if err != nil {
@@ -64,6 +75,9 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, fileName, filePath, event stri
 	}
 
 	handlerFile := dh.MainFilePath()
+	if handlerFile == "" {
+		return false, fmt.Errorf("handler MainFilePath cannot be empty")
+	}
 
 	// FIRST: Direct file comparison - check if handler manages this specific file
 	if filePath != "" && handlerFile != "" {

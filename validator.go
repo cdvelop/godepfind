@@ -49,15 +49,28 @@ func (g *GoDepFind) ValidateInputForProcessing(dh DepHandler, fileName, filePath
 	if filePath != "" && filepath.Ext(fileName) == ".go" {
 		validator := NewGoFileValidator()
 
+		// Resolve relative paths from the root directory
+		resolvedPath := filePath
+		if !filepath.IsAbs(filePath) {
+			// Check if filePath already starts with rootDir
+			if strings.HasPrefix(filePath, g.rootDir+"/") || filePath == g.rootDir {
+				// Path already includes rootDir, use as is
+				resolvedPath = filePath
+			} else {
+				// Path doesn't include rootDir, join them
+				resolvedPath = filepath.Join(g.rootDir, filePath)
+			}
+		}
+
 		// Check if file is valid
-		isValid, err := validator.IsValidGoFile(filePath)
+		isValid, err := validator.IsValidGoFile(resolvedPath)
 		if err != nil {
 			return false, fmt.Errorf("file validation failed: %w", err)
 		}
 
 		// If file is not valid, check if it's being written
 		if !isValid {
-			isBeingWritten, err := validator.IsFileBeingWritten(filePath)
+			isBeingWritten, err := validator.IsFileBeingWritten(resolvedPath)
 			if err != nil {
 				return false, fmt.Errorf("file write detection failed: %w", err)
 			}
@@ -71,6 +84,8 @@ func (g *GoDepFind) ValidateInputForProcessing(dh DepHandler, fileName, filePath
 			return false, nil
 		}
 	}
+	// If filePath is empty, we can't validate file existence, but that's OK
+	// The caller will use fileName-based lookup instead
 
 	return true, nil
 }
