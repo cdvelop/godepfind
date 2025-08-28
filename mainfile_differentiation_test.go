@@ -17,18 +17,18 @@ func TestMainFileDifferentiationAcrossApps(t *testing.T) {
 	wasmMain := "appCwasm/main.go"
 
 	tests := []struct {
-		name         string
-		mainFilePath string
-		fileName     string
-		filePath     string
-		expectOwner  bool
+		name                      string
+		mainInputFileRelativePath string
+		fileName                  string
+		filePath                  string
+		expectOwner               bool
 	}{
-		{"appA main owned by serverHandler", serverMain, "main.go", filepath.Join("testproject", "appAserver", "main.go"), true},
-		{"appA main not owned by cmdHandler", cmdMain, "main.go", filepath.Join("testproject", "appAserver", "main.go"), false},
-		{"appB main owned by cmdHandler", cmdMain, "main.go", filepath.Join("testproject", "appBcmd", "main.go"), true},
-		{"appB main not owned by wasmHandler", wasmMain, "main.go", filepath.Join("testproject", "appBcmd", "main.go"), false},
-		{"appC main owned by wasmHandler", wasmMain, "main.go", filepath.Join("testproject", "appCwasm", "main.go"), true},
-		{"module1 not owned by wasmHandler", wasmMain, "module1.go", filepath.Join("testproject", "modules", "module1", "module1.go"), false},
+		{"appA main owned by serverHandler", serverMain, "main.go", filepath.Join("appAserver", "main.go"), true},
+		{"appA main not owned by cmdHandler", cmdMain, "main.go", filepath.Join("appAserver", "main.go"), false},
+		{"appB main owned by cmdHandler", cmdMain, "main.go", filepath.Join("appBcmd", "main.go"), true},
+		{"appB main not owned by wasmHandler", wasmMain, "main.go", filepath.Join("appBcmd", "main.go"), false},
+		{"appC main owned by wasmHandler", wasmMain, "main.go", filepath.Join("appCwasm", "main.go"), true},
+		{"module1 not owned by wasmHandler", wasmMain, "module1.go", filepath.Join("modules", "module1", "module1.go"), false},
 	}
 
 	for _, tt := range tests {
@@ -47,7 +47,7 @@ func TestMainFileDifferentiationAcrossApps(t *testing.T) {
 			mainsForFile, _ := finder.GoFileComesFromMain(tt.fileName)
 			t.Logf("Diagnostics: resolvedPkg=%q, fileToPackages[\"%s\"]=%v, mainPackages=%v, mainsForFile=%v", resolvedPkg, tt.fileName, finder.fileToPackages[tt.fileName], finder.mainPackages, mainsForFile)
 
-			isMine, err := finder.ThisFileIsMine(tt.mainFilePath, tt.filePath, "write")
+			isMine, err := finder.ThisFileIsMine(tt.mainInputFileRelativePath, tt.filePath, "write")
 			if err != nil {
 				t.Fatalf("ThisFileIsMine returned unexpected error: %v", err)
 			}
@@ -56,7 +56,7 @@ func TestMainFileDifferentiationAcrossApps(t *testing.T) {
 				pkg, _ := finder.findPackageContainingFileByPath(tt.filePath)
 				var matched []string
 				for _, mp := range finder.mainPackages {
-					if finder.cachedMainImportsPackage(mp, pkg) && finder.matchesHandlerFile(mp, tt.mainFilePath) {
+					if finder.cachedMainImportsPackage(mp, pkg) && finder.matchesHandlerFile(mp, tt.mainInputFileRelativePath) {
 						matched = append(matched, mp)
 					}
 				}

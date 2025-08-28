@@ -15,11 +15,11 @@ func TestThisFileIsMineRealWorldScenario(t *testing.T) {
 	tinyWasmMainPath := "appCwasm/main.go"   // Simulates pwa/public/main.wasm
 
 	tests := []struct {
-		name         string
-		mainFilePath string
-		fileName     string
-		filePath     string
-		expectOwner  bool
+		name                      string
+		mainInputFileRelativePath string
+		fileName                  string
+		filePath                  string
+		expectOwner               bool
 	}{
 		{
 			"GoServer should own main.go when main.go is edited",
@@ -46,11 +46,11 @@ func TestThisFileIsMineRealWorldScenario(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Logf("MainFilePath: %s", tt.mainFilePath)
+			t.Logf("MainInputFileRelativePath: %s", tt.mainInputFileRelativePath)
 			t.Logf("File: %s, FilePath: %s", tt.fileName, tt.filePath)
 
 			// Test the actual method that's failing
-			isMine, err := finder.ThisFileIsMine(tt.mainFilePath, tt.filePath, "write")
+			isMine, err := finder.ThisFileIsMine(tt.mainInputFileRelativePath, tt.filePath, "write")
 
 			if err != nil {
 				t.Logf("ThisFileIsMine error: %v", err)
@@ -81,7 +81,7 @@ func TestRealWorldGoDevLogs(t *testing.T) {
 	filePath := "testproject/pwa/main.server.go"
 
 	t.Logf("=== Testing GoServer ===")
-	t.Logf("MainFilePath: %s File: %s", goServerMainPath, fileName)
+	t.Logf("MainInputFileRelativePath: %s File: %s", goServerMainPath, fileName)
 
 	isMine, err := finder.ThisFileIsMine(goServerMainPath, filePath, "write")
 	if err != nil {
@@ -96,7 +96,7 @@ func TestRealWorldGoDevLogs(t *testing.T) {
 	}
 
 	t.Logf("=== Testing TinyWasm ===")
-	t.Logf("MainFilePath: %s File: %s", tinyWasmMainPath, fileName)
+	t.Logf("MainInputFileRelativePath: %s File: %s", tinyWasmMainPath, fileName)
 
 	isMine, err = finder.ThisFileIsMine(tinyWasmMainPath, filePath, "write")
 	if err != nil {
@@ -113,7 +113,7 @@ func TestRealWorldGoDevLogs(t *testing.T) {
 	t.Logf("=== Testing TinyWasm with its own file ===")
 	wasmFileName := "main.wasm.go"
 	wasmFilePath := "testproject/pwa/main.wasm.go"
-	t.Logf("MainFilePath: %s File: %s", tinyWasmMainPath, wasmFileName)
+	t.Logf("MainInputFileRelativePath: %s File: %s", tinyWasmMainPath, wasmFileName)
 
 	isMine, err = finder.ThisFileIsMine(tinyWasmMainPath, wasmFilePath, "write")
 	if err != nil {

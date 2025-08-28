@@ -34,9 +34,9 @@ type GoDepFind struct {
 
 ### 3. File Ownership Method
 ```go
-func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error)
+func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, filePath, event string) (bool, error)
 ```
-- The `mainFilePath` is passed directly.
+- The `mainInputFileRelativePath` is passed directly.
 - Simplifies API by eliminating the `DepHandler` interface.
 - Returns error for robust error handling.
 
@@ -54,7 +54,7 @@ func (g *GoDepFind) ensureCacheInitialized() error {
 
 **Cache Management in ThisFileIsMine**: Cache updates happen only when handlers query file ownership
 ```go
-func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error) {
+func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, filePath, event string) (bool, error) {
     // Update cache based on file changes when queried
     if err := g.updateCacheForFile(filepath.Base(filePath), filePath, event); err != nil {
         return false, err
@@ -81,9 +81,9 @@ func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, 
 
 ### File Ownership Logic with Cache Management
 ```go
-func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error) {
-    if mainFilePath == "" {
-        return false, fmt.Errorf("mainFilePath cannot be empty")
+func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, filePath, event string) (bool, error) {
+    if mainInputFileRelativePath == "" {
+        return false, fmt.Errorf("mainInputFileRelativePath cannot be empty")
     }
     
     // Update cache based on file changes when queried
@@ -99,7 +99,7 @@ func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, 
     
     // Check if any main package matches the handler's main file path
     for _, mainPkg := range mainPackages {
-        if filepath.Base(mainPkg) == mainFilePath || strings.Contains(mainPkg, mainFilePath) {
+        if filepath.Base(mainPkg) == mainInputFileRelativePath || strings.Contains(mainPkg, mainInputFileRelativePath) {
             return true, nil
         }
     }
@@ -121,7 +121,7 @@ func (w *TinyWasm) NewFileEvent(fileName, extension, filePath, event string) err
     }
     
     // Cache is updated internally when ThisFileIsMine is called
-    isMine, err := w.goDepFind.ThisFileIsMine(w.mainFilePath, filePath, event)
+    isMine, err := w.goDepFind.ThisFileIsMine(w.mainInputFileRelativePath, filePath, event)
     if err != nil {
         return fmt.Errorf("%s: %w", e, err)
     }
@@ -165,7 +165,7 @@ func (w *SomeHandler) NewFileEvent(fileName, extension, filePath, event string) 
     }
     
     // Cache is updated internally within ThisFileIsMine
-    isMine, err := w.goDepFind.ThisFileIsMine(w.mainFilePath, filePath, event)
+    isMine, err := w.goDepFind.ThisFileIsMine(w.mainInputFileRelativePath, filePath, event)
     if err != nil {
         return fmt.Errorf("%s: %w", e, err)
     }

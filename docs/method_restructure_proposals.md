@@ -34,12 +34,12 @@ Donde:
 // ANTES:
 type DepHandler interface {
     Name() string         // handler name: wasmH, serverHttp, cliApp
-    MainFilePath() string // package identifier: "appAserver", "appBcmd", "appCwasm", etc.
+    MainInputFileRelativePath() string // package identifier: "appAserver", "appBcmd", "appCwasm", etc.
 }
 
 // DESPUÉS:
 type DepHandler interface {
-    MainFilePath() string // path file ej: app/web/main.go  
+    MainInputFileRelativePath() string // path file ej: app/web/main.go  
 }
 ```
 
@@ -68,10 +68,10 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, filePath, event string) (bool,
         return false, fmt.Errorf("cache update failed: %w", err)
     }
     
-    // Comparar directamente con MainFilePath del handler
-    handlerFile := dh.MainFilePath()
+    // Comparar directamente con MainInputFileRelativePath del handler
+    handlerFile := dh.MainInputFileRelativePath()
     if handlerFile == "" {
-        return false, fmt.Errorf("handler MainFilePath cannot be empty")
+        return false, fmt.Errorf("handler MainInputFileRelativePath cannot be empty")
     }
     
     // Normalizar paths para comparación
@@ -94,7 +94,7 @@ func (g *GoDepFind) ThisFileIsMine(dh DepHandler, filePath, event string) (bool,
 2. **Interfaz más simple**: DepHandler solo necesita un método  
 3. **Menos parámetros**: De 4 a 3 parámetros
 4. **Validación robusta**: Fuerza paths completos, no solo nombres de archivo
-5. **Comparación directa**: `filePath` vs `handler.MainFilePath()`
+5. **Comparación directa**: `filePath` vs `handler.MainInputFileRelativePath()`
 6. **Mantiene funcionalidad de cache**: `event` se preserva
 7. **Previene ambigüedad**: Imposible pasar archivos sin path
 

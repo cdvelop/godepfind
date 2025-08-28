@@ -69,8 +69,8 @@ fmt.Printf("Main packages affected by database.go changes: %v\n", mains)
 
 ```go
 // Check if a file change belongs to this handler
-mainFilePath := "app/server/main.go"
-isMine, err := finder.ThisFileIsMine(mainFilePath, "./internal/db/database.go", "write")
+mainInputFileRelativePath := "app/server/main.go"
+isMine, err := finder.ThisFileIsMine(mainInputFileRelativePath, "./internal/db/database.go", "write")
 if err != nil {
     log.Fatal(err)
 }
@@ -127,8 +127,8 @@ fmt.Printf("Need to rebuild: %v\n", affected)
 
 // NEW: Handler-based approach for development tools
 // Check if server handler should process this change
-mainFilePath := "cmd/server/main.go"
-shouldProcess, err := finder.ThisFileIsMine(mainFilePath, "./internal/database/db.go", "write")
+mainInputFileRelativePath := "cmd/server/main.go"
+shouldProcess, err := finder.ThisFileIsMine(mainInputFileRelativePath, "./internal/database/db.go", "write")
 if err != nil {
     log.Fatal(err)
 }
@@ -165,9 +165,9 @@ Find packages in sourcePath that import any of the targetPaths.
 
 ### New Cache-Enabled Functions
 
-### `ThisFileIsMine(mainFilePath, filePath, event string) (bool, error)`
+### `ThisFileIsMine(mainInputFileRelativePath, filePath, event string) (bool, error)`
 **NEW**: Determine if a file change belongs to a specific handler using intelligent dependency analysis.
-- `mainFilePath`: Path to the main file that this handler is responsible for managing.
+- `mainInputFileRelativePath`: Path to the main file that this handler is responsible for managing.
 - `filePath`: **Full path** to the changed file (e.g., "./internal/db/database.go") - **filePath must include directory separators**
 - `event`: Type of change ("write", "create", "remove", "rename")
 - Returns: (true if handler should process, error if any)

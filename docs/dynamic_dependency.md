@@ -32,7 +32,7 @@ case "write":
 
 ## Solución Propuesta: Re-escaneado Selectivo
 
-**Descripción**: Re-escanear las dependencias SOLO cuando el archivo modificado ES exactamente el `mainFilePath` (handlerFile) especificado.
+**Descripción**: Re-escanear las dependencias SOLO cuando el archivo modificado ES exactamente el `mainInputFileRelativePath` (handlerFile) especificado.
 
 ### Lógica de Implementación
 
@@ -45,7 +45,7 @@ func (g *GoDepFind) updateCacheForFile(fileName, filePath, event string) error {
 
     switch event {
     case "write":
-        // CLAVE: Solo re-escanear si el archivo modificado ES el mainFilePath del handler
+        // CLAVE: Solo re-escanear si el archivo modificado ES el mainInputFileRelativePath del handler
         // Esta información debe venir del contexto de la llamada
         if g.isTargetMainFile(filePath) {
             return g.rescanMainPackageDependencies(filePath)
@@ -68,7 +68,7 @@ func (g *GoDepFind) updateCacheForFile(fileName, filePath, event string) error {
 ### Funciones de Soporte
 
 ```go
-// isTargetMainFile verifica si el archivo modificado es un mainFilePath activo
+// isTargetMainFile verifica si el archivo modificado es un mainInputFileRelativePath activo
 func (g *GoDepFind) isTargetMainFile(filePath string) bool {
     // Esta función necesita acceso al contexto del handler
     // Se puede implementar de varias formas:
@@ -82,9 +82,9 @@ func (g *GoDepFind) isTargetMainFile(filePath string) bool {
 }
 
 // rescanMainPackageDependencies re-escanea solo las dependencias del paquete main específico
-func (g *GoDepFind) rescanMainPackageDependencies(mainFilePath string) error {
+func (g *GoDepFind) rescanMainPackageDependencies(mainInputFileRelativePath string) error {
     // 1. Identificar el paquete main
-    pkg, err := g.findPackageContainingFileByPath(mainFilePath)
+    pkg, err := g.findPackageContainingFileByPath(mainInputFileRelativePath)
     if err != nil {
         return err
     }
@@ -124,7 +124,7 @@ func (g *GoDepFind) rescanSpecificPackage(pkgPath string) error {
 
 ### Integración con ThisFileIsMine
 
-Para que `updateCacheForFile` sepa cuál es el `mainFilePath` del handler actual, necesitamos modificar la signatura o mantener estado:
+Para que `updateCacheForFile` sepa cuál es el `mainInputFileRelativePath` del handler actual, necesitamos modificar la signatura o mantener estado:
 
 ```go
 // Opción 1: Modificar signatura (recomendado)
@@ -132,7 +132,7 @@ func (g *GoDepFind) updateCacheForFileWithContext(fileName, filePath, event, han
     // ... lógica existente ...
     
     case "write":
-        // Verificar si este archivo ES el mainFilePath del handler
+        // Verificar si este archivo ES el mainInputFileRelativePath del handler
         if filePath == handlerMainFile || g.isSameFile(filePath, handlerMainFile) {
             return g.rescanMainPackageDependencies(filePath)
         }
@@ -140,11 +140,11 @@ func (g *GoDepFind) updateCacheForFileWithContext(fileName, filePath, event, han
 }
 
 // Actualizar ThisFileIsMine para pasar el contexto
-func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error) {
+func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, filePath, event string) (bool, error) {
     // ... validaciones existentes ...
     
     // Update cache with handler context
-    if err := g.updateCacheForFileWithContext(fileName, filePath, event, mainFilePath); err != nil {
+    if err := g.updateCacheForFileWithContext(fileName, filePath, event, mainInputFileRelativePath); err != nil {
         return false, fmt.Errorf("cache update failed: %w", err)
     }
     
@@ -184,7 +184,7 @@ func (g *GoDepFind) isSameFile(filePath1, filePath2 string) bool {
    - Solo el handler cuyo mainFile se modifica hace re-escaneado
 
 3. **Archivos No-Main**:
-   - Modificaciones a archivos que no son mainFilePath → Solo invalidación de cache
+   - Modificaciones a archivos que no son mainInputFileRelativePath → Solo invalidación de cache
    - Sin overhead de re-escaneado innecesario
 
 ## Plan de Implementación
@@ -203,7 +203,7 @@ func (g *GoDepFind) isSameFile(filePath1, filePath2 string) bool {
 
 3. **Implementar re-escaneado selectivo**:
    ```go
-   func (g *GoDepFind) rescanMainPackageDependencies(mainFilePath string) error
+   func (g *GoDepFind) rescanMainPackageDependencies(mainInputFileRelativePath string) error
    func (g *GoDepFind) rescanSpecificPackage(pkgPath string) error
    func (g *GoDepFind) updateDependencyGraphForMain(pkgPath string) error
    ```
@@ -240,12 +240,4 @@ func TestDynamicDependencyDetection(t *testing.T) {
 }
 ```
 
-## Próximos Pasos
 
-1. ✅ **Análisis completado** - Solución definida
-2. 🔄 **Implementar cambios** en `cache.go` y `godepfind.go`  
-3. 🧪 **Crear test comprehensivo** para validar el escenario
-4. 🚀 **Ejecutar test** y verificar que funciona correctamente
-5. 📚 **Documentar** el comportamiento nuevo en comentarios del código
-
-Esta solución es **simple, eficiente y precisa** - solo re-escanea cuando el archivo específico que está siendo monitoreado por un handler se modifica, evitando overhead innecesario.

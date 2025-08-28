@@ -8,30 +8,30 @@ func TestThisFileIsMine(t *testing.T) {
 	finder := New("testproject")
 
 	// Test with empty main file path - should return error
-	_, err := finder.ThisFileIsMine("", "testproject/appAserver/main.go", "write")
+	_, err := finder.ThisFileIsMine("", "appAserver/main.go", "write")
 	if err == nil {
 		t.Error("Expected error for empty main file path")
 	}
 
 	// Test main.go ownership: each handler should own only its specific main.go
 	tests := []struct {
-		name         string
-		mainFilePath string
-		filePath     string
-		expected     bool
+		name                      string
+		mainInputFileRelativePath string
+		filePath                  string
+		expected                  bool
 	}{
-		{"serverHandler owns appAserver main.go", "appAserver/main.go", "testproject/appAserver/main.go", true},
-		{"cmdHandler owns appBcmd main.go", "appBcmd/main.go", "testproject/appBcmd/main.go", true},
-		{"wasmHandler owns appCwasm main.go", "appCwasm/main.go", "testproject/appCwasm/main.go", true},
+		{"serverHandler owns appAserver main.go", "appAserver/main.go", "appAserver/main.go", true},
+		{"cmdHandler owns appBcmd main.go", "appBcmd/main.go", "appBcmd/main.go", true},
+		{"wasmHandler owns appCwasm main.go", "appCwasm/main.go", "appCwasm/main.go", true},
 		// Cross-ownership should be false (path-based disambiguation)
-		{"serverHandler does NOT own appBcmd main.go", "appAserver/main.go", "testproject/appBcmd/main.go", false},
-		{"cmdHandler does NOT own appCwasm main.go", "appBcmd/main.go", "testproject/appCwasm/main.go", false},
-		{"wasmHandler does NOT own appAserver main.go", "appCwasm/main.go", "testproject/appAserver/main.go", false},
+		{"serverHandler does NOT own appBcmd main.go", "appAserver/main.go", "appBcmd/main.go", false},
+		{"cmdHandler does NOT own appCwasm main.go", "appBcmd/main.go", "appCwasm/main.go", false},
+		{"wasmHandler does NOT own appAserver main.go", "appCwasm/main.go", "appAserver/main.go", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := finder.ThisFileIsMine(tt.mainFilePath, tt.filePath, "write")
+			result, err := finder.ThisFileIsMine(tt.mainInputFileRelativePath, tt.filePath, "write")
 			if err != nil {
 				t.Logf("Test %s: got error (may be expected in test environment): %v", tt.name, err)
 				return // Skip if cache initialization fails
@@ -52,12 +52,12 @@ func TestMatchesHandlerFile(t *testing.T) {
 		expected    bool
 		description string
 	}{
-		{"testproject/appAserver", "appAserver", true, "exact match with app name"},
-		{"testproject/appBcmd", "appBcmd", true, "exact match with cmd app name"},
-		{"testproject/appCwasm", "appCwasm", true, "exact match with wasm app name"},
-		{"testproject/appAserver", "main.go", false, "main.go is too generic"},
-		{"testproject/appBcmd", "appAserver", false, "cmd app doesn't match server"},
-		{"testproject/appCwasm", "wasm", true, "wasm in appCwasm should match wasm handler"},
+		{"appAserver", "appAserver/main.go", true, "exact match with app name"},
+		{"appBcmd", "appBcmd/main.go", true, "exact match with cmd app name"},
+		{"appCwasm", "appCwasm/main.go", true, "exact match with wasm app name"},
+		{"appAserver", "main.go", false, "main.go is too generic"},
+		{"appBcmd", "appAserver/main.go", false, "cmd app doesn't match server"},
+		{"appCwasm", "nonexistent/main.wasm.go", false, "non-existent handler file should return false"},
 	}
 
 	for _, test := range tests {

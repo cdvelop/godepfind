@@ -2,12 +2,28 @@ package godepfind
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
 
 // matchesHandlerFile checks if a main package matches a handler's managed file
 func (g *GoDepFind) matchesHandlerFile(mainPkg, handlerFile string) bool {
+	// VALIDATION: Check if handler file exists before proceeding
+	// This prevents non-existent files (like main.wasm.go when it doesn't exist)
+	// from incorrectly claiming ownership of files
+	var handlerFilePath string
+	if filepath.IsAbs(handlerFile) {
+		handlerFilePath = handlerFile
+	} else {
+		handlerFilePath = filepath.Join(g.rootDir, handlerFile)
+	}
+
+	// If the handler's main file doesn't exist, it cannot claim ownership of any files
+	if _, err := os.Stat(handlerFilePath); os.IsNotExist(err) {
+		return false
+	}
+
 	// Extract base name from main package path
 	baseName := filepath.Base(mainPkg)
 
@@ -328,7 +344,7 @@ func (g *GoDepFind) updateCacheForFileWithContext(fileName, filePath, event, han
 
 	switch event {
 	case "write":
-		// Only rescan fully if the modified file is the handler's mainFilePath
+		// Only rescan fully if the modified file is the handler's mainInputFileRelativePath
 		if handlerMainFile != "" && g.isSameFile(filePath, handlerMainFile) {
 			return g.rescanMainPackageDependencies(filePath)
 		}
@@ -349,7 +365,7 @@ func (g *GoDepFind) updateCacheForFileWithContext(fileName, filePath, event, han
 }
 
 // rescanMainPackageDependencies rescans only the dependencies of the main package
-func (g *GoDepFind) rescanMainPackageDependencies(mainFilePath string) error {
+func (g *GoDepFind) rescanMainPackageDependencies(mainInputFileRelativePath string) error {
 	// Simpler and robust: rebuild entire cache for module when main changes.
 	// This ensures dependencyGraph, file mappings and mainPackages stay consistent.
 	if err := g.rebuildCache(); err != nil {

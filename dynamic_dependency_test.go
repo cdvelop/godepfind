@@ -95,7 +95,7 @@ func main() {
 		t.Fatalf("modify main.go: %v", err)
 	}
 
-	// Trigger write event on main (pass handler mainFilePath as relative)
+	// Trigger write event on main (pass handler mainInputFileRelativePath as relative)
 	isMine, err = finder.ThisFileIsMine(relMain, mainPath, "write")
 	if err != nil {
 		t.Fatalf("write main error: %v", err)

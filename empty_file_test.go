@@ -34,11 +34,11 @@ func main() {
 	// Create GoDepFind instance
 	gdf := New(tempDir)
 
-	mainFilePath := "main.go"
+	mainInputFileRelativePath := "main.go"
 
 	// Test with empty file - this should not panic or break
 	// and should handle the empty file gracefully
-	result, err := gdf.ThisFileIsMine(mainFilePath, emptyFile, "create")
+	result, err := gdf.ThisFileIsMine(mainInputFileRelativePath, emptyFile, "create")
 
 	// The function should not return an error due to empty file
 	// but should handle it gracefully
@@ -73,10 +73,10 @@ func main() {
 	// Create GoDepFind instance
 	gdf := New(tempDir)
 
-	mainFilePath := "main.go"
+	mainInputFileRelativePath := "main.go"
 
 	// Test with invalid syntax file
-	result, err := gdf.ThisFileIsMine(mainFilePath, invalidFile, "create")
+	result, err := gdf.ThisFileIsMine(mainInputFileRelativePath, invalidFile, "create")
 
 	if err != nil {
 		t.Logf("Error occurred with invalid syntax file: %v", err)
@@ -100,10 +100,10 @@ func TestThisFileIsMineWithPartiallyWritten(t *testing.T) {
 	// Create GoDepFind instance
 	gdf := New(tempDir)
 
-	mainFilePath := "main.go"
+	mainInputFileRelativePath := "main.go"
 
 	// Test with partial file
-	result, err := gdf.ThisFileIsMine(mainFilePath, partialFile, "write")
+	result, err := gdf.ThisFileIsMine(mainInputFileRelativePath, partialFile, "write")
 
 	if err != nil {
 		t.Logf("Error occurred with partial file: %v", err)

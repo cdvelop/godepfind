@@ -9,63 +9,63 @@ import (
 // TestValidateInputForProcessing tests the centralized validation function
 func TestValidateInputForProcessing(t *testing.T) {
 	tests := []struct {
-		name            string
-		mainFilePath    string
-		fileName        string
-		fileContent     string
-		expectedProcess bool
-		expectError     bool
-		errorContains   string
+		name                      string
+		mainInputFileRelativePath string
+		fileName                  string
+		fileContent               string
+		expectedProcess           bool
+		expectError               bool
+		errorContains             string
 	}{
 		{
-			mainFilePath:    "main.go",
-			fileName:        "test.go",
-			fileContent:     "package main\n\nfunc main() {}",
-			expectedProcess: true,
-			expectError:     false,
+			mainInputFileRelativePath: "main.go",
+			fileName:                  "test.go",
+			fileContent:               "package main\n\nfunc main() {}",
+			expectedProcess:           true,
+			expectError:               false,
 		},
 		{
-			mainFilePath:    "",
-			fileName:        "test.go",
-			fileContent:     "package main",
-			expectedProcess: false,
-			expectError:     true,
-			errorContains:   "handler main file path cannot be empty",
+			mainInputFileRelativePath: "",
+			fileName:                  "test.go",
+			fileContent:               "package main",
+			expectedProcess:           false,
+			expectError:               true,
+			errorContains:             "handler main file path cannot be empty",
 		},
 		{
-			mainFilePath:    "main.go",
-			fileName:        "empty.go",
-			fileContent:     "",
-			expectedProcess: false,
-			expectError:     false,
+			mainInputFileRelativePath: "main.go",
+			fileName:                  "empty.go",
+			fileContent:               "",
+			expectedProcess:           false,
+			expectError:               false,
 		},
 		{
-			mainFilePath:    "main.go",
-			fileName:        "invalid.go",
-			fileContent:     "package main\n\nfunc main() {",
-			expectedProcess: false,
-			expectError:     false,
+			mainInputFileRelativePath: "main.go",
+			fileName:                  "invalid.go",
+			fileContent:               "package main\n\nfunc main() {",
+			expectedProcess:           false,
+			expectError:               false,
 		},
 		{
-			mainFilePath:    "main.go",
-			fileName:        "partial.go",
-			fileContent:     "pack", // Incomplete package declaration
-			expectedProcess: false,
-			expectError:     false,
+			mainInputFileRelativePath: "main.go",
+			fileName:                  "partial.go",
+			fileContent:               "pack", // Incomplete package declaration
+			expectedProcess:           false,
+			expectError:               false,
 		},
 		{
-			mainFilePath:    "main.go",
-			fileName:        "test.txt",
-			fileContent:     "some content",
-			expectedProcess: true, // Non-go files should pass validation
-			expectError:     false,
+			mainInputFileRelativePath: "main.go",
+			fileName:                  "test.txt",
+			fileContent:               "some content",
+			expectedProcess:           true, // Non-go files should pass validation
+			expectError:               false,
 		},
 		{
-			mainFilePath:    "main.go",
-			fileName:        "comments.go",
-			fileContent:     "// Only comments\n/* More comments */",
-			expectedProcess: false,
-			expectError:     false,
+			mainInputFileRelativePath: "main.go",
+			fileName:                  "comments.go",
+			fileContent:               "// Only comments\n/* More comments */",
+			expectedProcess:           false,
+			expectError:               false,
 		},
 	}
 
@@ -86,7 +86,7 @@ func TestValidateInputForProcessing(t *testing.T) {
 			gdf := New(tempDir)
 
 			// Test validation
-			shouldProcess, err := gdf.ValidateInputForProcessing(tt.mainFilePath, tt.fileName, filePath)
+			shouldProcess, err := gdf.ValidateInputForProcessing(tt.mainInputFileRelativePath, tt.fileName, filePath)
 
 			// Check error expectation
 			if tt.expectError && err == nil {
@@ -134,10 +134,10 @@ func main() {
 	}
 
 	gdf := New(tempDir)
-	mainFilePath := "main.go"
+	mainInputFileRelativePath := "main.go"
 
 	// Test with empty file - should return false without error
-	result, err := gdf.ThisFileIsMine(mainFilePath, emptyFile, "create")
+	result, err := gdf.ThisFileIsMine(mainInputFileRelativePath, emptyFile, "create")
 	if err != nil {
 		t.Errorf("Unexpected error with empty file: %v", err)
 	}
@@ -146,7 +146,7 @@ func main() {
 	}
 
 	// Test with valid file - should process normally
-	result, err = gdf.ThisFileIsMine(mainFilePath, mainFile, "create")
+	result, err = gdf.ThisFileIsMine(mainInputFileRelativePath, mainFile, "create")
 	if err != nil {
 		t.Logf("Error with valid file (expected in test environment): %v", err)
 	}

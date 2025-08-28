@@ -43,13 +43,13 @@ func BenchmarkGoFileComesFromMainWithCache(b *testing.B) {
 
 // BenchmarkThisFileIsMineWithoutCache tests ThisFileIsMine without cache
 func BenchmarkThisFileIsMineWithoutCache(b *testing.B) {
-	mainFilePath := "appAserver/main.go"
+	mainInputFileRelativePath := "appAserver/main.go"
 
 	for i := 0; i < b.N; i++ {
 		finder := New("testproject")
 		finder.cachedModule = false // Ensure cache is disabled
 
-		_, err := finder.ThisFileIsMine(mainFilePath, "./modules/module1/module1.go", "write")
+		_, err := finder.ThisFileIsMine(mainInputFileRelativePath, "./modules/module1/module1.go", "write")
 		if err != nil {
 			b.Fatalf("ThisFileIsMine failed: %v", err)
 		}
@@ -59,10 +59,10 @@ func BenchmarkThisFileIsMineWithoutCache(b *testing.B) {
 // BenchmarkThisFileIsMineWithCache tests ThisFileIsMine with cache
 func BenchmarkThisFileIsMineWithCache(b *testing.B) {
 	finder := New("testproject")
-	mainFilePath := "appAserver/main.go"
+	mainInputFileRelativePath := "appAserver/main.go"
 
 	// Warm up cache
-	_, err := finder.ThisFileIsMine(mainFilePath, "./modules/module1/module1.go", "write")
+	_, err := finder.ThisFileIsMine(mainInputFileRelativePath, "./modules/module1/module1.go", "write")
 	if err != nil {
 		b.Fatalf("Cache warmup failed: %v", err)
 	}
@@ -70,7 +70,7 @@ func BenchmarkThisFileIsMineWithCache(b *testing.B) {
 	b.ResetTimer() // Reset timer after cache warmup
 
 	for i := 0; i < b.N; i++ {
-		_, err := finder.ThisFileIsMine(mainFilePath, "./modules/module1/module1.go", "write")
+		_, err := finder.ThisFileIsMine(mainInputFileRelativePath, "./modules/module1/module1.go", "write")
 		if err != nil {
 			b.Fatalf("ThisFileIsMine failed: %v", err)
 		}
@@ -143,9 +143,9 @@ func BenchmarkRealWorldScenario(b *testing.B) {
 	events := []string{"write", "create", "remove"}
 
 	// Warm up cache
-	for _, mainFilePath := range mainFilePaths {
+	for _, mainInputFileRelativePath := range mainFilePaths {
 		for _, file := range files {
-			_, _ = finder.ThisFileIsMine(mainFilePath, "modules/"+file, "write")
+			_, _ = finder.ThisFileIsMine(mainInputFileRelativePath, "modules/"+file, "write")
 		}
 	}
 
@@ -153,11 +153,11 @@ func BenchmarkRealWorldScenario(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		// Simulate multiple handlers checking file ownership
-		mainFilePath := mainFilePaths[i%len(mainFilePaths)]
+		mainInputFileRelativePath := mainFilePaths[i%len(mainFilePaths)]
 		file := files[i%len(files)]
 		event := events[i%len(events)]
 
-		_, err := finder.ThisFileIsMine(mainFilePath, "modules/"+file, event)
+		_, err := finder.ThisFileIsMine(mainInputFileRelativePath, "modules/"+file, event)
 		if err != nil {
 			b.Fatalf("Real world scenario failed: %v", err)
 		}

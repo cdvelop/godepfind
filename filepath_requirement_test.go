@@ -51,19 +51,19 @@ func main() {
 	// Create godepfind instance
 	depFinder := godepfind.New(tmp)
 
-	mainFilePath := "app1/main.go"
+	mainInputFileRelativePath := "app1/main.go"
 
 	t.Run("empty_filePath_should_be_rejected", func(t *testing.T) {
 		// This should fail because filePath is empty
 		// Without filePath, godepfind can't distinguish between app1/main.go and app2/main.go
-		isMine, err := depFinder.ThisFileIsMine(mainFilePath, "", "write")
+		isMine, err := depFinder.ThisFileIsMine(mainInputFileRelativePath, "", "write")
 
 		// Should return error indicating filePath is required
 		if err == nil {
 			t.Fatal("Expected error when filePath is empty")
 		}
-		if !strings.Contains(err.Error(), "filePath cannot be empty") {
-			t.Fatalf("Expected error to contain 'filePath cannot be empty', got: %v", err)
+		if !strings.Contains(err.Error(), "fileAbsPath cannot be empty") {
+			t.Fatalf("Expected error to contain 'fileAbsPath cannot be empty', got: %v", err)
 		}
 		if isMine {
 			t.Fatal("Expected isMine to be false when filePath is empty")
@@ -72,7 +72,7 @@ func main() {
 
 	t.Run("correct_filePath_should_work", func(t *testing.T) {
 		// This should work because we provide the correct filePath
-		isMine, err := depFinder.ThisFileIsMine(mainFilePath, "app1/main.go", "write")
+		isMine, err := depFinder.ThisFileIsMine(mainInputFileRelativePath, "app1/main.go", "write")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -83,7 +83,7 @@ func main() {
 
 	t.Run("wrong_filePath_should_not_match", func(t *testing.T) {
 		// This should not match because it's the wrong file
-		isMine, err := depFinder.ThisFileIsMine(mainFilePath, "app2/main.go", "write")
+		isMine, err := depFinder.ThisFileIsMine(mainInputFileRelativePath, "app2/main.go", "write")
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}

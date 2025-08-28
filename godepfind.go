@@ -41,22 +41,40 @@ func New(rootDir string) *GoDepFind {
 	}
 }
 
-// ThisFileIsMine determines if a file belongs to a specific handler using path-based resolution
-func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error) {
-	// Validar que filePath no sea solo un archivo sin ruta
-	if filePath == "" {
-		return false, fmt.Errorf("filePath cannot be empty")
+// ThisFileIsMine determines if a file belongs to a specific handler using path-based resolution.
+//
+// IMPORTANT: the parameter now named `fileAbsPath` is expected to refer to the absolute
+// path of the file (this is the form normally provided by the `devwatch` watcher). If a
+// relative path is supplied, it will be resolved against `GoDepFind.rootDir` and converted
+// to an absolute path using `filepath.Abs` before any comparisons. This removes ambiguity
+// between relative and absolute paths and makes the function's behavior deterministic.
+//
+// Example:
+//
+//	mainInputFileRelativePath: "appAserver/main.go"
+//	fileAbsPath: "/home/user/app/appBcmd/main.go"
+//	event: "create"/"write"/"delete"/"rename"
+func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, fileAbsPath, event string) (bool, error) {
+	// Normalize and ensure we operate on an absolute path
+	if fileAbsPath == "" {
+		return false, fmt.Errorf("fileAbsPath cannot be empty")
 	}
 
-	if !strings.Contains(filePath, "/") && !strings.Contains(filePath, "\\") {
-		return false, fmt.Errorf("filePath must include directory path, not just filename: %s", filePath)
+	// If the caller provided a relative path, resolve it against rootDir first
+	if !filepath.IsAbs(fileAbsPath) {
+		fileAbsPath = filepath.Join(g.rootDir, fileAbsPath)
 	}
+	absFilePath, err := filepath.Abs(fileAbsPath)
+	if err != nil {
+		return false, fmt.Errorf("cannot resolve fileAbsPath to absolute path: %w", err)
+	}
+	fileAbsPath = absFilePath
 
-	// Derivar fileName del filePath
-	fileName := filepath.Base(filePath)
+	// Derive fileName from the absolute path
+	fileName := filepath.Base(fileAbsPath)
 
 	// Validate input before processing
-	shouldProcess, err := g.ValidateInputForProcessing(mainFilePath, fileName, filePath)
+	shouldProcess, err := g.ValidateInputForProcessing(mainInputFileRelativePath, fileName, fileAbsPath)
 	if err != nil {
 		return false, err
 	}
@@ -65,46 +83,44 @@ func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, 
 	}
 
 	// Update cache based on file changes when queried (pass handler context)
-	if err := g.updateCacheForFileWithContext(fileName, filePath, event, mainFilePath); err != nil {
+	if err := g.updateCacheForFileWithContext(fileName, fileAbsPath, event, mainInputFileRelativePath); err != nil {
 		return false, fmt.Errorf("cache update failed: %w", err)
 	}
 
-	handlerFile := mainFilePath
+	handlerFile := mainInputFileRelativePath
 	if handlerFile == "" {
-		return false, fmt.Errorf("handler mainFilePath cannot be empty")
+		return false, fmt.Errorf("handler mainInputFileRelativePath cannot be empty")
 	}
 
 	// FIRST: Direct file comparison - check if handler manages this specific file
-	if filePath != "" && handlerFile != "" {
-		// Extract the filename from handler's MainFilePath for comparison
+	if fileAbsPath != "" && handlerFile != "" {
+		// Extract the filename from handler's MainInputFileRelativePath for comparison
 		handlerFileName := filepath.Base(handlerFile)
 
 		// If the filenames match, check if they're in the same relative path
 		if fileName == handlerFileName {
 			// Get the relative path from the project root
-			relativeFilePath := strings.TrimPrefix(filePath, g.rootDir+"/")
+			relativeFilePath := strings.TrimPrefix(fileAbsPath, g.rootDir+"/")
 
-			// Compare with handler's MainFilePath
+			// Compare with handler's MainInputFileRelativePath
 			if relativeFilePath == handlerFile {
 				return true, nil
 			}
 		}
 
-		// Also try absolute path comparison as fallback
-		if absFilePath, err := filepath.Abs(filePath); err == nil {
-			if absHandlerPath, err := filepath.Abs(handlerFile); err == nil {
-				if absFilePath == absHandlerPath {
-					return true, nil
-				}
+		// Also try absolute path comparison as fallback using the already-normalized fileAbsPath
+		if absHandlerPath, err := filepath.Abs(handlerFile); err == nil {
+			if fileAbsPath == absHandlerPath {
+				return true, nil
 			}
+		}
 
-			// Try relative path from root
-			if !filepath.IsAbs(handlerFile) {
-				handlerAbsPath := filepath.Join(g.rootDir, handlerFile)
-				if absHandlerPath, err := filepath.Abs(handlerAbsPath); err == nil {
-					if absFilePath == absHandlerPath {
-						return true, nil
-					}
+		// Try relative path from root for handler file
+		if !filepath.IsAbs(handlerFile) {
+			handlerAbsPath := filepath.Join(g.rootDir, handlerFile)
+			if absHandlerPath, err := filepath.Abs(handlerAbsPath); err == nil {
+				if fileAbsPath == absHandlerPath {
+					return true, nil
 				}
 			}
 		}
@@ -112,15 +128,10 @@ func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, 
 
 	// SECOND: Package-based resolution for files that aren't directly managed
 	var targetPkg string
-	if filePath != "" {
+	if fileAbsPath != "" {
 		// Use exact path resolution when available (priority)
-		var resolvedPath string
-		if filepath.IsAbs(filePath) {
-			resolvedPath = filePath
-		} else {
-			// For relative paths, resolve from rootDir
-			resolvedPath = filepath.Join(g.rootDir, filePath)
-		}
+		// resolvedPath should already be absolute since we normalized earlier
+		resolvedPath := fileAbsPath
 
 		if absPath, err := filepath.Abs(resolvedPath); err == nil {
 			// Try absolute path lookup first (rebuildCache stores absolute paths)
@@ -128,9 +139,13 @@ func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, 
 				targetPkg = pkg
 			} else {
 				// Convert to relative path for cache lookup as fallback
-				relPath, err := filepath.Rel(g.rootDir, absPath)
+				cwd, err := os.Getwd()
 				if err != nil {
-					relPath = filePath // fallback to original
+					cwd = "."
+				}
+				relPath, err := filepath.Rel(cwd, absPath)
+				if err != nil {
+					relPath = fileAbsPath // fallback to original
 				}
 				if pkg, exists := g.filePathToPackage[relPath]; exists {
 					targetPkg = pkg

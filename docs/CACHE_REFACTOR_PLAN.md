@@ -112,9 +112,9 @@ for pkgPath, pkg := range packages {
 
 **New simplified logic:**
 ```go
-func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, error) {
+func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, filePath, event string) (bool, error) {
     // Validate and update cache (unchanged)
-    shouldProcess, err := g.ValidateInputForProcessing(mainFilePath, filepath.Base(filePath), filePath)
+    shouldProcess, err := g.ValidateInputForProcessing(mainInputFileRelativePath, filepath.Base(filePath), filePath)
     if err != nil || !shouldProcess {
         return false, err
     }
@@ -123,9 +123,9 @@ func (g *GoDepFind) ThisFileIsMine(mainFilePath, filePath, event string) (bool, 
         return false, fmt.Errorf("cache update failed: %w", err)
     }
 
-    handlerFile := mainFilePath
+    handlerFile := mainInputFileRelativePath
     
-    // SIMPLIFIED LOGIC: Check if fileName matches handler's MainFilePath
+    // SIMPLIFIED LOGIC: Check if fileName matches handler's MainInputFileRelativePath
     if filepath.Base(filePath) == handlerFile {
         var candidatePackages []string
         
@@ -295,7 +295,7 @@ func TestMainFileOwnershipWithMultipleMainFiles(t *testing.T) {
     
     // Test each handler recognizes only its own main.go
     testCases := []struct {
-        mainFilePath string
+        mainInputFileRelativePath string
         filePath string
         expected bool
     }{
@@ -308,10 +308,10 @@ func TestMainFileOwnershipWithMultipleMainFiles(t *testing.T) {
     }
     
     for _, tc := range testCases {
-        result, err := finder.ThisFileIsMine(tc.mainFilePath, tc.filePath, "write")
+        result, err := finder.ThisFileIsMine(tc.mainInputFileRelativePath, tc.filePath, "write")
         require.NoError(t, err)
         assert.Equal(t, tc.expected, result, 
-            "Main file %s should %s own %s", tc.mainFilePath,
+            "Main file %s should %s own %s", tc.mainInputFileRelativePath,
             map[bool]string{true: "", false: "NOT"}[tc.expected], tc.filePath)
     }
 }
@@ -323,14 +323,14 @@ func TestFilePathDisambiguation(t *testing.T) {
     finder := New("testproject")
     
     // Create handler that manages specific main package
-    mainFilePath := "appAserver/main.go"
+    mainInputFileRelativePath := "appAserver/main.go"
     
     // Should return true for appAserver/main.go only
-    result, err := finder.ThisFileIsMine(mainFilePath, "testproject/appAserver/main.go", "write")
+    result, err := finder.ThisFileIsMine(mainInputFileRelativePath, "testproject/appAserver/main.go", "write")
     assert.True(t, result)
     
     // Should return false for other main.go files
-    result, err = finder.ThisFileIsMine(mainFilePath, "testproject/appBcmd/main.go", "write")
+    result, err = finder.ThisFileIsMine(mainInputFileRelativePath, "testproject/appBcmd/main.go", "write")
     assert.False(t, result)
 }
 ```
