@@ -34,7 +34,7 @@ func TestDebugMatchesHandlerFile(t *testing.T) {
 		t.Fatalf("Cache initialization failed: %v", err)
 	}
 
-	err = finder.updateCacheForFileWithContext(fileName, fileAbsPath, event, mainInputFileRelativePath)
+	err = finder.updateCacheForFileWithContext(fileAbsPath, event, mainInputFileRelativePath)
 	if err != nil {
 		t.Fatalf("Cache update failed: %v", err)
 	}

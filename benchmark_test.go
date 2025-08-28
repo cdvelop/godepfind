@@ -178,7 +178,7 @@ func BenchmarkCacheInvalidation(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		// Simulate file write that invalidates cache
-		err := finder.updateCacheForFile("module1.go", "./modules/module1/module1.go", "write")
+		err := finder.updateCacheForFile("./modules/module1/module1.go", "write")
 		if err != nil {
 			b.Fatalf("Cache invalidation failed: %v", err)
 		}

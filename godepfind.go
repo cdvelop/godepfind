@@ -41,19 +41,26 @@ func New(rootDir string) *GoDepFind {
 	}
 }
 
-// ThisFileIsMine determines if a file belongs to a specific handler using path-based resolution.
+// ThisFileIsMine decides whether the provided handler (identified by its
+// main file path relative to the module root) should handle an event for the
+// given file. It normalizes paths, validates the handler main file exists,
+// updates internal caches when a main file is written (so dynamic import
+// changes are recognized), and finally uses package dependency analysis to
+// decide file ownership.
 //
-// This function is used by development tools to route file changes to the appropriate handler.
-// It validates that the handler's main file exists before claiming ownership of other files.
+// Important: preference is given to checking the specific handler main-file
+// imports (not just directory-level mains). That lets the finder disambiguate
+// multiple `main` packages that may live in the same directory but are
+// selected via build tags (for example: two mains in one folder with
+// `//go:build wasm` vs `//go:build !wasm`). In those cases the exact main file
+// (and its build tags/imports) determines ownership.
 //
-// Parameters:
-//   - mainInputFileRelativePath: Path to the handler's main file (e.g., "pwa/main.server.go")
-//   - fileAbsPath: Absolute path to the file being checked (e.g., "/project/database/db.go")
-//   - event: Type of file event ("write", "create", "delete", "rename")
+// Inputs:
+//   - mainInputFileRelativePath: handler main file (e.g. "pwa/main.server.go")
+//   - fileAbsPath: target file path (absolute or relative to module root)
+//   - event: one of "write","create","remove","rename" (drives cache ops)
 //
-// Returns:
-//   - bool: true if this handler should process the file
-//   - error: validation error if handler main file doesn't exist or other issues
+// Returns: (bool, error) — true when the handler should process the file.
 func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, fileAbsPath, event string) (bool, error) {
 	// 1. Basic input validation
 	if fileAbsPath == "" {
@@ -72,7 +79,6 @@ func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, fileAbsPath, event
 		return false, fmt.Errorf("cannot resolve fileAbsPath to absolute path: %w", err)
 	}
 	fileAbsPath = absFilePath
-	fileName := filepath.Base(fileAbsPath)
 
 	// 3. CRITICAL: Verify handler's main file exists
 	handlerMainAbsPath := mainInputFileRelativePath
@@ -87,7 +93,7 @@ func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, fileAbsPath, event
 	}
 
 	// 4. Validate target file (skip if file doesn't exist or is being written)
-	if filepath.Ext(fileName) == ".go" {
+	if filepath.Ext(fileAbsPath) == ".go" {
 		validator := NewGoFileValidator()
 		if isValid, err := validator.IsValidGoFile(fileAbsPath); err != nil {
 			return false, fmt.Errorf("file validation failed: %w", err)
@@ -104,20 +110,20 @@ func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, fileAbsPath, event
 	if isHandlerMainFile {
 		// 6. CRITICAL: If this is the handler's main file, update cache for dynamic dependencies
 		// This handles cases where main.go is modified to add/remove imports
-		if err := g.updateCacheForFileWithContext(fileName, fileAbsPath, event, mainInputFileRelativePath); err != nil {
+		if err := g.updateCacheForFileWithContext(fileAbsPath, event, mainInputFileRelativePath); err != nil {
 			return false, fmt.Errorf("cache update failed: %w", err)
 		}
 		return true, nil
 	}
 
 	// 7. For non-main files, check package-based ownership (cache already initialized if needed)
-	return g.checkPackageBasedOwnership(mainInputFileRelativePath, fileAbsPath, fileName)
+	return g.checkPackageBasedOwnership(mainInputFileRelativePath, fileAbsPath)
 }
 
 // checkPackageBasedOwnership determines ownership based on Go package dependencies
-func (g *GoDepFind) checkPackageBasedOwnership(mainInputFileRelativePath, fileAbsPath, fileName string) (bool, error) {
+func (g *GoDepFind) checkPackageBasedOwnership(mainInputFileRelativePath, fileAbsPath string) (bool, error) {
 	// Find which package contains the target file
-	targetPkg, err := g.findPackageForFile(fileAbsPath, fileName)
+	targetPkg, err := g.findPackageForFile(fileAbsPath)
 	if err != nil {
 		return false, err
 	}
@@ -130,7 +136,7 @@ func (g *GoDepFind) checkPackageBasedOwnership(mainInputFileRelativePath, fileAb
 }
 
 // findPackageForFile finds which package contains the given file
-func (g *GoDepFind) findPackageForFile(fileAbsPath, fileName string) (string, error) {
+func (g *GoDepFind) findPackageForFile(fileAbsPath string) (string, error) {
 	// Ensure cache is initialized
 	if err := g.ensureCacheInitialized(); err != nil {
 		return "", err
@@ -151,6 +157,7 @@ func (g *GoDepFind) findPackageForFile(fileAbsPath, fileName string) (string, er
 	}
 
 	// Last resort: filename-based lookup (may be ambiguous)
+	fileName := filepath.Base(fileAbsPath)
 	if packages := g.fileToPackages[fileName]; len(packages) > 0 {
 		return packages[0], nil
 	}
@@ -178,21 +185,133 @@ func (g *GoDepFind) doesPackageBelongToHandler(targetPkg, mainInputFileRelativeP
 		}
 	}
 
-	// Case 2: Check if any main package imports this target package
-	for _, mainPkg := range g.mainPackages {
-		if g.cachedMainImportsPackage(mainPkg, targetPkg) {
-			// Check if this main package belongs to our handler
-			if pkg, exists := g.packageCache[mainPkg]; exists && pkg != nil {
-				if relPkgDir, err := filepath.Rel(g.rootDir, pkg.Dir); err == nil {
-					if filepath.Clean(relPkgDir) == filepath.Clean(handlerDir) {
-						return true
-					}
-				}
-			}
+	// Case 2: Check if the SPECIFIC handler file imports this target package
+	// This is more precise than checking if any main package in the directory imports it
+	return g.handlerFileImportsPackage(mainInputFileRelativePath, targetPkg)
+}
+
+// handlerFileImportsPackage checks if a specific handler file imports the given package
+func (g *GoDepFind) handlerFileImportsPackage(handlerFileRelativePath, targetPkg string) bool {
+	// Ensure cache is initialized
+	if err := g.ensureCacheInitialized(); err != nil {
+		return false
+	}
+
+	// Build the absolute path to the handler file
+	handlerAbsPath := handlerFileRelativePath
+	if !filepath.IsAbs(handlerAbsPath) {
+		handlerAbsPath = filepath.Join(g.rootDir, handlerFileRelativePath)
+	}
+
+	// Parse the handler file to extract its imports
+	imports, err := g.parseFileImports(handlerAbsPath)
+	if err != nil {
+		return false
+	}
+
+	// Direct import check
+	for _, imp := range imports {
+		if imp == targetPkg {
+			return true
+		}
+	}
+
+	// Transitive import check - check if any direct import depends on targetPkg
+	for _, imp := range imports {
+		if g.cachedMainImportsPackage(imp, targetPkg) {
+			return true
 		}
 	}
 
 	return false
+}
+
+// parseFileImports extracts the import statements from a specific Go file
+func (g *GoDepFind) parseFileImports(filePath string) ([]string, error) {
+	// For now, use a simple file parsing approach
+	// This is a known limitation - we're parsing at file level but Go packages aggregate all files
+	// For the specific use case of main.server.go vs main.wasm.go, we need to parse the files individually
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var imports []string
+	lines := strings.Split(string(content), "\n")
+	inImportBlock := false
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Multi-line import block start (check this BEFORE single line import)
+		if line == "import (" {
+			inImportBlock = true
+			continue
+		}
+
+		// Multi-line import block end
+		if inImportBlock && line == ")" {
+			inImportBlock = false
+			continue
+		}
+
+		// Import inside block
+		if inImportBlock {
+			if path := extractImportPath(line); path != "" {
+				imports = append(imports, path)
+			}
+			continue
+		}
+
+		// Single line import (check this AFTER import block detection)
+		if strings.HasPrefix(line, "import ") {
+			// Extract import path from 'import "path"'
+			if path := extractImportPath(line); path != "" {
+				imports = append(imports, path)
+			}
+			continue
+		}
+	}
+
+	return imports, nil
+}
+
+// extractImportPath extracts the import path from an import line
+func extractImportPath(line string) string {
+	// Remove comments
+	if idx := strings.Index(line, "//"); idx != -1 {
+		line = line[:idx]
+	}
+	line = strings.TrimSpace(line)
+
+	// Skip empty lines
+	if line == "" {
+		return ""
+	}
+
+	// Handle different import formats:
+	// import "path"
+	// "path"
+	// alias "path"
+	// . "path"
+	// _ "path"
+
+	// Remove import keyword if present
+	line = strings.TrimPrefix(line, "import ")
+	line = strings.TrimSpace(line)
+
+	// Find the quoted path
+	start := strings.Index(line, "\"")
+	if start == -1 {
+		return ""
+	}
+	end := strings.LastIndex(line, "\"")
+	if end == -1 || end <= start {
+		return ""
+	}
+
+	return line[start+1 : end]
 }
 
 // SetTestImports enables or disables inclusion of test imports

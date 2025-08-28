@@ -6,7 +6,7 @@ import (
 )
 
 // updateCacheForFile updates cache based on file events
-func (g *GoDepFind) updateCacheForFile(fileName, filePath, event string) error {
+func (g *GoDepFind) updateCacheForFile(filePath, event string) error {
 	// Initialize cache if needed
 	if err := g.ensureCacheInitialized(); err != nil {
 		return err
@@ -15,19 +15,19 @@ func (g *GoDepFind) updateCacheForFile(fileName, filePath, event string) error {
 	switch event {
 	case "write":
 		// Invalidate only the package containing the file
-		return g.invalidatePackageCache(fileName)
+		return g.invalidatePackageCache(filePath)
 	case "create":
 		// Re-scan dependencies of the parent package + update fileToPackage mapping
-		return g.handleFileCreate(fileName, filePath)
+		return g.handleFileCreate(filePath)
 	case "remove":
 		// Invalidate dependencies pointing to that file + remove from fileToPackage
-		return g.handleFileRemove(fileName, filePath)
+		return g.handleFileRemove(filePath)
 	case "rename":
 		// Treat as remove + create sequence
-		if err := g.handleFileRemove(fileName, filePath); err != nil {
+		if err := g.handleFileRemove(filePath); err != nil {
 			return err
 		}
-		return g.handleFileCreate(fileName, filePath)
+		return g.handleFileCreate(filePath)
 	}
 
 	return nil
@@ -42,24 +42,25 @@ func (g *GoDepFind) ensureCacheInitialized() error {
 }
 
 // invalidatePackageCache invalidates cache for a specific package
-func (g *GoDepFind) invalidatePackageCache(fileName string) error {
-	// Find ALL packages containing this filename
-	packages := g.fileToPackages[fileName]
+func (g *GoDepFind) invalidatePackageCache(filePath string) error {
+	// Find the package containing this file
+	pkg, err := g.findPackageContainingFileByPath(filePath)
+	if err != nil || pkg == "" {
+		return nil // File not found in any package, nothing to invalidate
+	}
 
-	for _, pkg := range packages {
-		// Remove from caches
-		delete(g.packageCache, pkg)
-		delete(g.dependencyGraph, pkg)
-		delete(g.reverseDeps, pkg)
+	// Remove from caches
+	delete(g.packageCache, pkg)
+	delete(g.dependencyGraph, pkg)
+	delete(g.reverseDeps, pkg)
 
-		// Remove from other packages' dependency lists
-		for otherPkg := range g.dependencyGraph {
-			deps := g.dependencyGraph[otherPkg]
-			for i, dep := range deps {
-				if dep == pkg {
-					g.dependencyGraph[otherPkg] = append(deps[:i], deps[i+1:]...)
-					break
-				}
+	// Remove from other packages' dependency lists
+	for otherPkg := range g.dependencyGraph {
+		deps := g.dependencyGraph[otherPkg]
+		for i, dep := range deps {
+			if dep == pkg {
+				g.dependencyGraph[otherPkg] = append(deps[:i], deps[i+1:]...)
+				break
 			}
 		}
 	}
@@ -67,19 +68,20 @@ func (g *GoDepFind) invalidatePackageCache(fileName string) error {
 }
 
 // invalidatePackageCacheOnly invalidates only packageCache, preserves dependencyGraph
-func (g *GoDepFind) invalidatePackageCacheOnly(fileName string) error {
-	// Find ALL packages containing this filename
-	packages := g.fileToPackages[fileName]
-
-	for _, pkg := range packages {
-		// Only remove from packageCache, preserve dependencyGraph and reverseDeps
-		delete(g.packageCache, pkg)
+func (g *GoDepFind) invalidatePackageCacheOnly(filePath string) error {
+	// Find the package containing this file
+	pkg, err := g.findPackageContainingFileByPath(filePath)
+	if err != nil || pkg == "" {
+		return nil // File not found in any package, nothing to invalidate
 	}
+
+	// Only remove from packageCache, preserve dependencyGraph and reverseDeps
+	delete(g.packageCache, pkg)
 	return nil
 }
 
 // handleFileCreate handles file creation events
-func (g *GoDepFind) handleFileCreate(fileName, filePath string) error {
+func (g *GoDepFind) handleFileCreate(filePath string) error {
 	// filePath is now always required and contains full path
 	pkg, err := g.findPackageContainingFileByPath(filePath)
 	if err != nil {
@@ -93,17 +95,18 @@ func (g *GoDepFind) handleFileCreate(fileName, filePath string) error {
 		}
 
 		// Add to filename mapping (don't overwrite, append if not exists)
+		fileName := filepath.Base(filePath)
 		if !contains(g.fileToPackages[fileName], pkg) {
 			g.fileToPackages[fileName] = append(g.fileToPackages[fileName], pkg)
 		}
 
-		return g.invalidatePackageCache(fileName)
+		return g.invalidatePackageCache(filePath)
 	}
 	return nil
 }
 
 // handleFileRemove handles file removal events
-func (g *GoDepFind) handleFileRemove(fileName, filePath string) error {
+func (g *GoDepFind) handleFileRemove(filePath string) error {
 	// Remove from path mapping
 	if filePath != "" {
 		if absPath, err := filepath.Abs(filePath); err == nil {
@@ -115,11 +118,12 @@ func (g *GoDepFind) handleFileRemove(fileName, filePath string) error {
 	if filePath != "" {
 		pkg, _ := g.findPackageContainingFileByPath(filePath)
 		if pkg != "" {
+			fileName := filepath.Base(filePath)
 			g.fileToPackages[fileName] = removeString(g.fileToPackages[fileName], pkg)
 		}
 	}
 
-	return g.invalidatePackageCache(fileName)
+	return g.invalidatePackageCache(filePath)
 }
 
 // Helper functions
@@ -272,7 +276,7 @@ func (g *GoDepFind) isSameFile(filePath1, filePath2 string) bool {
 }
 
 // updateCacheForFileWithContext updates cache based on file events and handler context
-func (g *GoDepFind) updateCacheForFileWithContext(fileName, filePath, event, handlerMainFile string) error {
+func (g *GoDepFind) updateCacheForFileWithContext(filePath, event, handlerMainFile string) error {
 	// Initialize cache if needed
 	if err := g.ensureCacheInitialized(); err != nil {
 		return err
@@ -285,16 +289,16 @@ func (g *GoDepFind) updateCacheForFileWithContext(fileName, filePath, event, han
 			return g.rescanMainPackageDependencies(filePath)
 		}
 		// For non-main files, only invalidate package cache (don't touch dependency graph)
-		return g.invalidatePackageCacheOnly(fileName)
+		return g.invalidatePackageCacheOnly(filePath)
 	case "create":
-		return g.handleFileCreate(fileName, filePath)
+		return g.handleFileCreate(filePath)
 	case "remove":
-		return g.handleFileRemove(fileName, filePath)
+		return g.handleFileRemove(filePath)
 	case "rename":
-		if err := g.handleFileRemove(fileName, filePath); err != nil {
+		if err := g.handleFileRemove(filePath); err != nil {
 			return err
 		}
-		return g.handleFileCreate(fileName, filePath)
+		return g.handleFileCreate(filePath)
 	}
 
 	return nil
