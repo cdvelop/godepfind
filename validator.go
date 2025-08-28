@@ -33,13 +33,29 @@ func NewGoFileValidator() *GoFileValidator {
 //   - shouldProcess=true, error=nil: Continue with normal processing
 //   - shouldProcess=false, error=nil: Skip processing (file is being written, empty, etc.)
 //   - shouldProcess=false, error!=nil: Return error to caller (invalid handler, etc.)
+//
+// ValidateInputForProcessing validates handler and file before processing
+// This function provides centralized validation that can be reused across multiple API endpoints.
+//
+// It performs the following validations:
+// 1. Handler validation (non-empty main file path)
+// 2. Go file validation (syntax, completeness, and write-in-progress detection)
+//
+// Returns:
+//   - shouldProcess: true if processing should continue, false if file should be skipped
+//   - error: validation error that should be returned to caller, or nil if validation passed
+//
+// Usage patterns:
+//   - shouldProcess=true, error=nil: Continue with normal processing
+//   - shouldProcess=false, error=nil: Skip processing (file is being written, empty, etc.)
+//   - shouldProcess=false, error!=nil: Return error to caller (invalid handler, etc.)
 func (g *GoDepFind) ValidateInputForProcessing(mainInputFileRelativePath, fileName, filePath string) (bool, error) {
-	// Validate handler's main file path
+	// Validate handler's main file path is not empty
 	if mainInputFileRelativePath == "" {
 		return false, fmt.Errorf("handler main file path cannot be empty")
 	}
 
-	// Validate Go file before processing
+	// Validate Go file before processing (if we have a file path)
 	if filePath != "" && filepath.Ext(fileName) == ".go" {
 		validator := NewGoFileValidator()
 

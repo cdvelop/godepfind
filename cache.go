@@ -2,72 +2,8 @@ package godepfind
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
 )
-
-// matchesHandlerFile checks if a main package matches a handler's managed file
-func (g *GoDepFind) matchesHandlerFile(mainPkg, handlerFile string) bool {
-	// VALIDATION: Check if handler file exists before proceeding
-	// This prevents non-existent files (like main.wasm.go when it doesn't exist)
-	// from incorrectly claiming ownership of files
-	var handlerFilePath string
-	if filepath.IsAbs(handlerFile) {
-		handlerFilePath = handlerFile
-	} else {
-		handlerFilePath = filepath.Join(g.rootDir, handlerFile)
-	}
-
-	// If the handler's main file doesn't exist, it cannot claim ownership of any files
-	if _, err := os.Stat(handlerFilePath); os.IsNotExist(err) {
-		return false
-	}
-
-	// Extract base name from main package path
-	baseName := filepath.Base(mainPkg)
-
-	// Extract filename from handler file (in case it's a path)
-	handlerFileName := filepath.Base(handlerFile)
-
-	// Direct match with package base name (for cases like "appAserver")
-	if baseName == handlerFile || baseName == handlerFileName {
-		return true
-	}
-
-	// Extract the base name without extension from handler file
-	handlerBase := strings.TrimSuffix(handlerFileName, filepath.Ext(handlerFileName))
-
-	// Check if main package contains the handler base name
-	// e.g., "main.server.go" -> "main.server", check if package contains "server"
-	if strings.Contains(handlerBase, ".") {
-		parts := strings.Split(handlerBase, ".")
-		for _, part := range parts {
-			if part != "main" && part != "" && strings.Contains(mainPkg, part) {
-				return true
-			}
-		}
-	}
-
-	// Check if main package contains handler base (without extension)
-	if handlerBase != "" && handlerBase != "main" && strings.Contains(mainPkg, handlerBase) {
-		return true
-	}
-
-	// If handlerFile contains a path (e.g., "appDserver/main.go"), compare the first path element
-	if strings.Contains(handlerFile, "/") || strings.Contains(handlerFile, "\\") {
-		// Normalize to forward slashes for consistent splitting
-		hf := filepath.ToSlash(handlerFile)
-		parts := strings.Split(hf, "/")
-		if len(parts) > 0 {
-			if parts[0] == baseName {
-				return true
-			}
-		}
-	}
-
-	return false
-}
 
 // updateCacheForFile updates cache based on file events
 func (g *GoDepFind) updateCacheForFile(fileName, filePath, event string) error {

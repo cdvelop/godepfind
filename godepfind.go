@@ -43,24 +43,27 @@ func New(rootDir string) *GoDepFind {
 
 // ThisFileIsMine determines if a file belongs to a specific handler using path-based resolution.
 //
-// IMPORTANT: the parameter now named `fileAbsPath` is expected to refer to the absolute
-// path of the file (this is the form normally provided by the `devwatch` watcher). If a
-// relative path is supplied, it will be resolved against `GoDepFind.rootDir` and converted
-// to an absolute path using `filepath.Abs` before any comparisons. This removes ambiguity
-// between relative and absolute paths and makes the function's behavior deterministic.
+// This function is used by development tools to route file changes to the appropriate handler.
+// It validates that the handler's main file exists before claiming ownership of other files.
 //
-// Example:
+// Parameters:
+//   - mainInputFileRelativePath: Path to the handler's main file (e.g., "pwa/main.server.go")
+//   - fileAbsPath: Absolute path to the file being checked (e.g., "/project/database/db.go")
+//   - event: Type of file event ("write", "create", "delete", "rename")
 //
-//	mainInputFileRelativePath: "appAserver/main.go"
-//	fileAbsPath: "/home/user/app/appBcmd/main.go"
-//	event: "create"/"write"/"delete"/"rename"
+// Returns:
+//   - bool: true if this handler should process the file
+//   - error: validation error if handler main file doesn't exist or other issues
 func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, fileAbsPath, event string) (bool, error) {
-	// Normalize and ensure we operate on an absolute path
+	// 1. Basic input validation
 	if fileAbsPath == "" {
 		return false, fmt.Errorf("fileAbsPath cannot be empty")
 	}
+	if mainInputFileRelativePath == "" {
+		return false, fmt.Errorf("handler mainInputFileRelativePath cannot be empty")
+	}
 
-	// If the caller provided a relative path, resolve it against rootDir first
+	// 2. Normalize file path to absolute
 	if !filepath.IsAbs(fileAbsPath) {
 		fileAbsPath = filepath.Join(g.rootDir, fileAbsPath)
 	}
@@ -69,114 +72,127 @@ func (g *GoDepFind) ThisFileIsMine(mainInputFileRelativePath, fileAbsPath, event
 		return false, fmt.Errorf("cannot resolve fileAbsPath to absolute path: %w", err)
 	}
 	fileAbsPath = absFilePath
-
-	// Derive fileName from the absolute path
 	fileName := filepath.Base(fileAbsPath)
 
-	// Validate input before processing
-	shouldProcess, err := g.ValidateInputForProcessing(mainInputFileRelativePath, fileName, fileAbsPath)
-	if err != nil {
-		return false, err
+	// 3. CRITICAL: Verify handler's main file exists
+	handlerMainAbsPath := mainInputFileRelativePath
+	if !filepath.IsAbs(handlerMainAbsPath) {
+		handlerMainAbsPath = filepath.Join(g.rootDir, mainInputFileRelativePath)
 	}
-	if !shouldProcess {
-		return false, nil
-	}
-
-	// Update cache based on file changes when queried (pass handler context)
-	if err := g.updateCacheForFileWithContext(fileName, fileAbsPath, event, mainInputFileRelativePath); err != nil {
-		return false, fmt.Errorf("cache update failed: %w", err)
-	}
-
-	handlerFile := mainInputFileRelativePath
-	if handlerFile == "" {
-		return false, fmt.Errorf("handler mainInputFileRelativePath cannot be empty")
-	}
-
-	// FIRST: Direct file comparison - check if handler manages this specific file
-	if fileAbsPath != "" && handlerFile != "" {
-		// Extract the filename from handler's MainInputFileRelativePath for comparison
-		handlerFileName := filepath.Base(handlerFile)
-
-		// If the filenames match, check if they're in the same relative path
-		if fileName == handlerFileName {
-			// Get the relative path from the project root
-			relativeFilePath := strings.TrimPrefix(fileAbsPath, g.rootDir+"/")
-
-			// Compare with handler's MainInputFileRelativePath
-			if relativeFilePath == handlerFile {
-				return true, nil
-			}
+	if _, err := os.Stat(handlerMainAbsPath); err != nil {
+		if os.IsNotExist(err) {
+			return false, fmt.Errorf("handler main file does not exist: %s", mainInputFileRelativePath)
 		}
+		return false, fmt.Errorf("cannot access handler main file %s: %w", mainInputFileRelativePath, err)
+	}
 
-		// Also try absolute path comparison as fallback using the already-normalized fileAbsPath
-		if absHandlerPath, err := filepath.Abs(handlerFile); err == nil {
-			if fileAbsPath == absHandlerPath {
-				return true, nil
-			}
-		}
-
-		// Try relative path from root for handler file
-		if !filepath.IsAbs(handlerFile) {
-			handlerAbsPath := filepath.Join(g.rootDir, handlerFile)
-			if absHandlerPath, err := filepath.Abs(handlerAbsPath); err == nil {
-				if fileAbsPath == absHandlerPath {
-					return true, nil
-				}
-			}
+	// 4. Validate target file (skip if file doesn't exist or is being written)
+	if filepath.Ext(fileName) == ".go" {
+		validator := NewGoFileValidator()
+		if isValid, err := validator.IsValidGoFile(fileAbsPath); err != nil {
+			return false, fmt.Errorf("file validation failed: %w", err)
+		} else if !isValid {
+			// File is invalid/empty/being written - skip processing
+			return false, nil
 		}
 	}
 
-	// SECOND: Package-based resolution for files that aren't directly managed
-	var targetPkg string
-	if fileAbsPath != "" {
-		// Use exact path resolution when available (priority)
-		// resolvedPath should already be absolute since we normalized earlier
-		resolvedPath := fileAbsPath
+	// 5. Direct file comparison - is this the handler's own main file?
+	relativeFilePath := strings.TrimPrefix(fileAbsPath, g.rootDir+"/")
+	isHandlerMainFile := relativeFilePath == mainInputFileRelativePath
 
-		if absPath, err := filepath.Abs(resolvedPath); err == nil {
-			// Try absolute path lookup first (rebuildCache stores absolute paths)
-			if pkg, exists := g.filePathToPackage[absPath]; exists {
-				targetPkg = pkg
-			} else {
-				// Convert to relative path for cache lookup as fallback
-				cwd, err := os.Getwd()
-				if err != nil {
-					cwd = "."
-				}
-				relPath, err := filepath.Rel(cwd, absPath)
-				if err != nil {
-					relPath = fileAbsPath // fallback to original
-				}
-				if pkg, exists := g.filePathToPackage[relPath]; exists {
-					targetPkg = pkg
-				}
-			}
+	if isHandlerMainFile {
+		// 6. CRITICAL: If this is the handler's main file, update cache for dynamic dependencies
+		// This handles cases where main.go is modified to add/remove imports
+		if err := g.updateCacheForFileWithContext(fileName, fileAbsPath, event, mainInputFileRelativePath); err != nil {
+			return false, fmt.Errorf("cache update failed: %w", err)
 		}
-	}
-
-	// If no exact path match, find packages containing the file
-	if targetPkg == "" {
-		packages := g.fileToPackages[fileName]
-		if len(packages) == 0 {
-			return false, nil // File not found in any package
-		}
-		// Use the first package (path resolution should handle disambiguation)
-		targetPkg = packages[0]
-	}
-
-	// Check if this is a main package that matches the handler
-	if g.isMainPackage(targetPkg) && g.matchesHandlerFile(targetPkg, handlerFile) {
 		return true, nil
 	}
 
-	// Check if any main package imports this target package and matches the handler
-	for _, mainPath := range g.mainPackages {
-		if g.cachedMainImportsPackage(mainPath, targetPkg) && g.matchesHandlerFile(mainPath, handlerFile) {
-			return true, nil
+	// 7. For non-main files, check package-based ownership (cache already initialized if needed)
+	return g.checkPackageBasedOwnership(mainInputFileRelativePath, fileAbsPath, fileName)
+}
+
+// checkPackageBasedOwnership determines ownership based on Go package dependencies
+func (g *GoDepFind) checkPackageBasedOwnership(mainInputFileRelativePath, fileAbsPath, fileName string) (bool, error) {
+	// Find which package contains the target file
+	targetPkg, err := g.findPackageForFile(fileAbsPath, fileName)
+	if err != nil {
+		return false, err
+	}
+	if targetPkg == "" {
+		return false, nil // File not found in any package
+	}
+
+	// Check if target package should belong to this handler
+	return g.doesPackageBelongToHandler(targetPkg, mainInputFileRelativePath), nil
+}
+
+// findPackageForFile finds which package contains the given file
+func (g *GoDepFind) findPackageForFile(fileAbsPath, fileName string) (string, error) {
+	// Ensure cache is initialized
+	if err := g.ensureCacheInitialized(); err != nil {
+		return "", err
+	}
+
+	// Try exact path lookup first (most reliable)
+	if pkg, exists := g.filePathToPackage[fileAbsPath]; exists {
+		return pkg, nil
+	}
+
+	// Fallback: try relative path lookup
+	if cwd, err := os.Getwd(); err == nil {
+		if relPath, err := filepath.Rel(cwd, fileAbsPath); err == nil {
+			if pkg, exists := g.filePathToPackage[relPath]; exists {
+				return pkg, nil
+			}
 		}
 	}
 
-	return false, nil
+	// Last resort: filename-based lookup (may be ambiguous)
+	if packages := g.fileToPackages[fileName]; len(packages) > 0 {
+		return packages[0], nil
+	}
+
+	return "", nil
+}
+
+// doesPackageBelongToHandler determines if a package should be handled by this handler
+func (g *GoDepFind) doesPackageBelongToHandler(targetPkg, mainInputFileRelativePath string) bool {
+	handlerDir := filepath.Dir(mainInputFileRelativePath)
+
+	// Case 1: If target is a main package in the same directory as handler
+	if g.isMainPackage(targetPkg) {
+		// Extract directory from package path and compare with handler directory
+		for _, mainPkg := range g.mainPackages {
+			if mainPkg == targetPkg {
+				if pkg, exists := g.packageCache[mainPkg]; exists && pkg != nil {
+					if relPkgDir, err := filepath.Rel(g.rootDir, pkg.Dir); err == nil {
+						return filepath.Clean(relPkgDir) == filepath.Clean(handlerDir)
+					}
+				}
+				// Fallback: compare package name with handler directory
+				return filepath.Base(targetPkg) == filepath.Base(handlerDir)
+			}
+		}
+	}
+
+	// Case 2: Check if any main package imports this target package
+	for _, mainPkg := range g.mainPackages {
+		if g.cachedMainImportsPackage(mainPkg, targetPkg) {
+			// Check if this main package belongs to our handler
+			if pkg, exists := g.packageCache[mainPkg]; exists && pkg != nil {
+				if relPkgDir, err := filepath.Rel(g.rootDir, pkg.Dir); err == nil {
+					if filepath.Clean(relPkgDir) == filepath.Clean(handlerDir) {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // SetTestImports enables or disables inclusion of test imports
@@ -351,6 +367,53 @@ func (g *GoDepFind) isMainPackage(pkgPath string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// matchesHandlerFile determines whether a main package path corresponds to the
+// handler file provided by the watcher. The logic is intentionally simple and
+// path-based: it checks whether the handler's directory matches the package
+// directory (using the package cache when available) or if the package name
+// matches the handler directory basename.
+func (g *GoDepFind) matchesHandlerFile(mainPkg, handlerFile string) bool {
+	if handlerFile == "" || mainPkg == "" {
+		return false
+	}
+
+	// Normalize handler directory relative to rootDir when possible
+	handlerDir := filepath.Dir(handlerFile)
+	if filepath.IsAbs(handlerFile) {
+		// Convert to relative from rootDir to compare with package paths
+		if rel, err := filepath.Rel(g.rootDir, handlerFile); err == nil {
+			handlerDir = filepath.Dir(rel)
+		}
+	}
+	handlerDir = filepath.ToSlash(handlerDir)
+
+	// 1) Quick base-name match: package base == handler directory base
+	if filepath.Base(mainPkg) == filepath.Base(handlerDir) {
+		return true
+	}
+
+	// 2) Suffix match: package path ends with handlerDir (covers cases like
+	//    "testproject/test/pwa" vs handlerDir "test/pwa" or "pwa")
+	if handlerDir != "." && handlerDir != "" {
+		if strings.HasSuffix(filepath.ToSlash(mainPkg), handlerDir) {
+			return true
+		}
+	}
+
+	// 3) Fall back to packageCache lookup (if available) to compare actual
+	// package directory on disk with handlerDir.
+	if pkg, ok := g.packageCache[mainPkg]; ok && pkg != nil {
+		if relPkgDir, err := filepath.Rel(g.rootDir, pkg.Dir); err == nil {
+			relPkgDir = filepath.ToSlash(relPkgDir)
+			if relPkgDir == handlerDir || strings.HasSuffix(filepath.ToSlash(mainPkg), relPkgDir) {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
