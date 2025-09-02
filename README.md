@@ -248,3 +248,6 @@ This makes `godepfind` suitable for real-time file watching in development tools
 This library is based on the excellent work of [Andrew Wilkins](https://github.com/axw) and his [rdep](https://github.com/axw/rdep) tool. The core reverse dependency detection logic was adapted and extended from his implementation to provide file-to-main package mapping functionality.
 
 Special thanks to Andrew for creating the foundational reverse dependency analysis that made this library possible.
+
+
+## [Contributing](https://github.com/cdvelop/cdvelop/blob/main/CONTRIBUTING.md)
