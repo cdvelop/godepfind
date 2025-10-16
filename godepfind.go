@@ -320,15 +320,29 @@ func (g *GoDepFind) SetTestImports(enabled bool) {
 }
 
 // listPackages returns the result of running "go list" with the specified path
+// It tolerates build constraint errors (e.g., WASM packages) and returns whatever packages
+// it can successfully list, only returning error if no packages are found at all
 func (g *GoDepFind) listPackages(path string) ([]string, error) {
 	cmd := exec.Command("go", "list", path)
 	cmd.Dir = g.rootDir
-	cmd.Stderr = os.Stderr
+	// Don't redirect stderr to os.Stderr to avoid polluting logs with build constraint warnings
 	out, err := cmd.Output()
+
+	// Parse the output even if the command failed
+	packages := strings.Fields(string(out))
+
+	// If we got at least some packages, ignore the error
+	// This handles cases where some packages have build constraints (e.g., WASM)
+	if len(packages) > 0 {
+		return packages, nil
+	}
+
+	// Only return error if we couldn't list any packages
 	if err != nil {
 		return nil, err
 	}
-	return strings.Fields(string(out)), nil
+
+	return packages, nil
 }
 
 // getPackages imports and returns a build.Package for each listed package
